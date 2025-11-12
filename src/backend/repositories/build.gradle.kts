@@ -29,6 +29,15 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // JDBI dependencies
+    implementation("org.jdbi:jdbi3-core:3.50.0")
+    implementation("org.jdbi:jdbi3-kotlin:3.50.0")
+    implementation("org.jdbi:jdbi3-kotlin-sqlobject:3.50.0")
+    implementation("org.jdbi:jdbi3-sqlobject:3.50.0")
+    implementation("org.jdbi:jdbi3-spring:3.50.0")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    implementation("org.jdbi:jdbi3-postgres:3.50.0")
 }
 
 tasks.test {

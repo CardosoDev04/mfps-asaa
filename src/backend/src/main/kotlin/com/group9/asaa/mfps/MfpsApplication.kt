@@ -1,14 +1,18 @@
 package com.group9.asaa.mfps
 
+import com.group9.asaa.DemoRepo
+import com.group9.asaa.MessageObject
 import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.PropertySource
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-@SpringBootApplication
+@SpringBootApplication(exclude = [DataSourceAutoConfiguration::class])
 @ComponentScan("com.group9.asaa")
 @PropertySource("classpath:secrets-dev.properties")
 class MfpsApplication
@@ -21,7 +25,7 @@ fun main(args: Array<String>) {
 @RestController
 @RequestMapping("/mfps")
 class MfpsController {
-	@RequestMapping("/system-status")
+	@GetMapping("/system-status")
 	fun status(): ResponseEntity<String> {
 		return ResponseEntity.ok().body("Mfps System is running")
 	}
