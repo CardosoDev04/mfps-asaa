@@ -12,9 +12,9 @@ interface IAssemblyService {
     fun getAssemblySystemState(): AssemblySystemStates
     fun queueSize(): StateFlow<Int>
 
-    fun confirmCurrentOrder(accepted: Boolean)
-    fun signalTransportArrived()
-    fun validateAssembly(valid: Boolean)
+    fun confirmOrder(orderId: String, accepted: Boolean)
+    fun signalTransportArrived(orderId: String)
+    fun validateAssembly(orderId: String, valid: Boolean)
 
     fun demoAutopilot(acceptAfterMs: Long, deliverAfterMs: Long, validateAfterMs: Long, valid: Boolean)
 }

@@ -31,7 +31,8 @@ class AssemblyController(
     suspend fun bulk(
         @RequestParam(defaultValue = "10") n: Int,
         @RequestParam(defaultValue = "false") demo: Boolean
-    ): ResponseEntity<String> {
+    ): ResponseEntity<List<AssemblyTransportOrder>> {
+        val created = mutableListOf<AssemblyTransportOrder>()
         repeat(n) { idx ->
             val bp = Blueprint(
                 id = "bp-${System.currentTimeMillis()}-$idx",
@@ -39,9 +40,9 @@ class AssemblyController(
                 components = emptyList(),
                 attachments = emptyList()
             )
-            assemblyService.createOrder(bp, demo)
+            created += assemblyService.createOrder(bp, demo)
         }
-        return ResponseEntity.ok("Enqueued $n orders (demo=$demo)")
+        return ResponseEntity.ok(created)
     }
 
     @GetMapping("/queue-size")
@@ -52,23 +53,32 @@ class AssemblyController(
     fun getSystemState(): ResponseEntity<AssemblySystemStates> =
         ResponseEntity.ok(assemblyService.getAssemblySystemState())
 
+    // AssemblyController.kt
+
     @PutMapping("/confirm-order")
-    fun confirmCurrentOrder(@RequestParam(defaultValue = "true") accepted: Boolean): ResponseEntity<Void> {
-        assemblyService.confirmCurrentOrder(accepted = accepted)
+    fun confirmOrder(
+        @RequestParam orderId: String,
+        @RequestParam(defaultValue = "true") accepted: Boolean
+    ): ResponseEntity<Void> {
+        assemblyService.confirmOrder(orderId, accepted)
         return ResponseEntity.ok().build()
     }
 
     @PutMapping("/signal-transport-arrived")
-    fun signalTransportArrived(): ResponseEntity<Void> {
-        assemblyService.signalTransportArrived()
+    fun signalTransportArrived(@RequestParam orderId: String): ResponseEntity<Void> {
+        assemblyService.signalTransportArrived(orderId)
         return ResponseEntity.ok().build()
     }
 
     @PutMapping("/validate-assembly")
-    fun validateAssembly(@RequestParam(defaultValue = "true") valid: Boolean): ResponseEntity<Void> {
-        assemblyService.validateAssembly(valid = valid)
+    fun validateAssembly(
+        @RequestParam orderId: String,
+        @RequestParam(defaultValue = "true") valid: Boolean
+    ): ResponseEntity<Void> {
+        assemblyService.validateAssembly(orderId, valid)
         return ResponseEntity.ok().build()
     }
+
 
     @GetMapping("/events")
     fun streamEvents(): SseEmitter {

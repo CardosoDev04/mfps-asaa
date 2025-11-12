@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -53,29 +52,30 @@ class AssemblyStateMachine(
         _logs.tryEmit("Transition → $to")
     }
 
-    private suspend fun notifyOnce(s: AssemblyTransportOrderStates) {
-        transition(AssemblySystemStates.NOTIFYING_STATUS)
+    private suspend fun notifyStatusOnly(s: AssemblyTransportOrderStates) {
         ports.notifyStatus(s)
     }
 
     private suspend fun finishAndReturn(
         order: AssemblyTransportOrder,
-        reported: AssemblyTransportOrderStates
+        reported: AssemblyTransportOrderStates,
+        finalSystemState: AssemblySystemStates
     ): AssemblyResult {
-        notifyOnce(reported)
-        transition(AssemblySystemStates.IDLE)
+        notifyStatusOnly(reported)
+        transition(finalSystemState)
         return AssemblyResult(order, state.value, reported)
     }
 
     suspend fun run(
         blueprint: Blueprint,
-        deliveryLocation: Locations = Locations.ASSEMBLY_LINE_A
+        deliveryLocation: Locations = Locations.ASSEMBLY_LINE_A,
+        orderId: String
     ): AssemblyResult {
         require(scope.isActive) { "State machine scope is not active." }
 
         transition(AssemblySystemStates.CREATING_ORDER)
         val order = AssemblyTransportOrder(
-            orderId = "order-${System.currentTimeMillis()}",
+            orderId = orderId,
             components = blueprint.components,
             deliveryLocation = deliveryLocation
         )
@@ -92,16 +92,14 @@ class AssemblyStateMachine(
         transition(AssemblySystemStates.EVALUATING_CONFIRMATION)
         when (confirmation) {
             null -> {
-                transition(AssemblySystemStates.ORDER_TIMED_OUT)
-                return finishAndReturn(order, AssemblyTransportOrderStates.DENIED)
+                return finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ORDER_TIMED_OUT)
             }
             false -> {
-                transition(AssemblySystemStates.ORDER_DENIED)
-                return finishAndReturn(order, AssemblyTransportOrderStates.DENIED)
+                return finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ORDER_DENIED)
             }
             true -> {
                 transition(AssemblySystemStates.ORDER_ACCEPTED)
-                scope.launch { notifyOnce(AssemblyTransportOrderStates.ACCEPTED) }
+                notifyStatusOnly(AssemblyTransportOrderStates.ACCEPTED)
             }
         }
 
@@ -111,27 +109,25 @@ class AssemblyStateMachine(
         } ?: false
 
         if (!delivered) {
-            transition(AssemblySystemStates.ORDER_TIMED_OUT)
-            return finishAndReturn(order, AssemblyTransportOrderStates.DENIED)
+            return finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ORDER_TIMED_OUT)
         }
 
         ports.acquireAssemblyPermit()
         try {
             transition(AssemblySystemStates.ASSEMBLING)
+            notifyStatusOnly(AssemblyTransportOrderStates.IN_PROGRESS)
             val validation = withTimeoutOrNull(timeouts.validationTimeout) {
                 ports.performAssemblyAndValidate()
             }
             return when (validation) {
                 null -> {
-                    transition(AssemblySystemStates.ASSEMBLY_TIMED_OUT)
-                    finishAndReturn(order, AssemblyTransportOrderStates.DENIED)
+                    finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ASSEMBLY_TIMED_OUT)
                 }
                 ValidationOutcome.INVALID -> {
-                    finishAndReturn(order, AssemblyTransportOrderStates.DENIED)
+                    finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ASSEMBLY_INVALID)
                 }
                 ValidationOutcome.VALID -> {
-                    transition(AssemblySystemStates.ASSEMBLY_COMPLETED)
-                    finishAndReturn(order, AssemblyTransportOrderStates.COMPLETED)
+                    finishAndReturn(order, AssemblyTransportOrderStates.COMPLETED, AssemblySystemStates.ASSEMBLY_COMPLETED)
                 }
             }
         } finally {

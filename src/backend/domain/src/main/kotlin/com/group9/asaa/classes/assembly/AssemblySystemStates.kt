@@ -14,5 +14,6 @@ enum class AssemblySystemStates {
     ASSEMBLING,
     ASSEMBLY_TIMED_OUT,
     ASSEMBLY_COMPLETED,
+    ASSEMBLY_INVALID,
     NOTIFYING_STATUS
 }

@@ -5,10 +5,13 @@ import com.group9.asaa.classes.assembly.AssemblySystemStates
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
 import com.group9.asaa.classes.assembly.Blueprint
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
 import org.springframework.stereotype.Service
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 
 @Service
@@ -17,18 +20,20 @@ class AssemblyService : IAssemblyService, AutoCloseable {
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Default + job)
 
-    private val _systemState = MutableStateFlow(AssemblySystemStates.IDLE)
-    override fun observeAssemblySystemState(): StateFlow<AssemblySystemStates> = _systemState
-    override fun getAssemblySystemState(): AssemblySystemStates = _systemState.value
-
-    private val _events = MutableSharedFlow<AssemblyEvent>(extraBufferCapacity = 256)
+    private val _events = MutableSharedFlow<AssemblyEvent>(
+        extraBufferCapacity = 512,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     fun observeEvents(): SharedFlow<AssemblyEvent> = _events.asSharedFlow()
 
-    @Volatile private var currentConfirmation: MutableStateFlow<Boolean?>? = null
-    @Volatile private var currentArrival: MutableStateFlow<Boolean>? = null
-    @Volatile private var currentValidation: MutableStateFlow<ValidationOutcome?>? = null
+    private val confirmations = ConcurrentHashMap<String, MutableStateFlow<Boolean?>>()
+    private val arrivals = ConcurrentHashMap<String, MutableStateFlow<Boolean>>()
+    private val validations = ConcurrentHashMap<String, MutableStateFlow<ValidationOutcome?>>()
+
+    private val orderStates = ConcurrentHashMap<String, MutableStateFlow<AssemblySystemStates>>()
 
     private val assemblyGate = Semaphore(1)
+    private val _overallSystemState = MutableStateFlow(AssemblySystemStates.IDLE)
 
     private data class Enqueued(
         val blueprint: Blueprint,
@@ -39,6 +44,18 @@ class AssemblyService : IAssemblyService, AutoCloseable {
     private val queue = Channel<Enqueued>(capacity = 100)
     private val _queueSize = MutableStateFlow(0)
     override fun queueSize(): StateFlow<Int> = _queueSize
+
+    override fun observeAssemblySystemState(): StateFlow<AssemblySystemStates> =
+        _overallSystemState.asStateFlow()
+
+    override fun getAssemblySystemState(): AssemblySystemStates =
+        _overallSystemState.value
+
+    fun observeOrderSystemState(orderId: String): StateFlow<AssemblySystemStates> =
+        orderStates.computeIfAbsent(orderId) { MutableStateFlow(AssemblySystemStates.IDLE) }
+
+    fun getOrderSystemState(orderId: String): AssemblySystemStates =
+        orderStates[orderId]?.value ?: AssemblySystemStates.IDLE
 
     init {
         scope.launch {
@@ -64,24 +81,45 @@ class AssemblyService : IAssemblyService, AutoCloseable {
     }
 
     private suspend fun runOne(orderBlueprint: Blueprint, demo: Boolean): AssemblyTransportOrder {
-        val confirmationFlow = MutableStateFlow<Boolean?>(null).also { currentConfirmation = it }
-        val transportArrivedFlow = MutableStateFlow(false).also { currentArrival = it }
-        val validationFlow = MutableStateFlow<ValidationOutcome?>(null).also { currentValidation = it }
+        val orderId = "order-${UUID.randomUUID()}"
+        val myState = orderStates.computeIfAbsent(orderId) { MutableStateFlow(AssemblySystemStates.IDLE) }
+
+        val confirmationFlow = MutableStateFlow<Boolean?>(null)
+        val transportArrivedFlow = MutableStateFlow(false)
+        val validationFlow = MutableStateFlow<ValidationOutcome?>(null)
 
         val orderCreated = CompletableDeferred<AssemblyTransportOrder>()
 
         val ports = AssemblyPorts(
-            sendOrder = { order -> orderCreated.complete(order) },
+            sendOrder = { order ->
+                val final = order.copy(orderId = orderId)
+                confirmations[orderId] = confirmationFlow
+                arrivals[orderId] = transportArrivedFlow
+                validations[orderId] = validationFlow
+                orderCreated.complete(final)
+            },
             awaitOrderConfirmation = { confirmationFlow.filterNotNull().first() },
             awaitTransportArrival = { transportArrivedFlow.filter { it }.first() },
             performAssemblyAndValidate = { validationFlow.filterNotNull().first() },
-            notifyStatus = { state -> _events.tryEmit(AssemblyEvent(kind = "status", message = state.name)) },
-            acquireAssemblyPermit = { assemblyGate.acquire() },
-            releaseAssemblyPermit = { assemblyGate.release() }
+            notifyStatus = { state ->
+                _events.tryEmit(
+                    AssemblyEvent(kind = "status", message = state.name, orderId = orderId)
+                )
+            },
+            acquireAssemblyPermit = {
+                assemblyGate.acquire()
+                _overallSystemState.value = AssemblySystemStates.ASSEMBLING
+            },
+            releaseAssemblyPermit = {
+                assemblyGate.release()
+                _overallSystemState.value = AssemblySystemStates.IDLE
+            }
         )
 
+        val orderScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
+
         val machine = AssemblyStateMachine(
-            scope = scope,
+            scope = orderScope,
             ports = ports,
             timeouts = AssemblyTimeouts(
                 confirmationTimeout = 5.seconds,
@@ -90,18 +128,8 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             )
         )
 
-        val stateCollector = scope.launch {
-            machine.state.collect { st ->
-                _systemState.value = st
-                _events.tryEmit(AssemblyEvent(kind = "state", state = st))
-            }
-        }
-        val logCollector = scope.launch {
-            machine.logs.collect { msg -> _events.tryEmit(AssemblyEvent(kind = "log", message = msg)) }
-        }
-
         val perRunAutopilot = if (demo) {
-            scope.launch {
+            orderScope.launch {
                 delay(2_000)
                 confirmationFlow.value = true
                 delay(20_000)
@@ -111,27 +139,56 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             }
         } else null
 
-        try {
-            scope.launch { machine.run(orderBlueprint) }
-            return orderCreated.await()
-        } finally {
-            perRunAutopilot?.cancel()
-            stateCollector.cancel()
-            logCollector.cancel()
-            currentConfirmation = null
-            currentArrival = null
-            currentValidation = null
+        val machineJob = orderScope.launch {
+            val stateCollectorReady = CompletableDeferred<Unit>()
+            val logCollectorReady = CompletableDeferred<Unit>()
+
+            val stateCollector = launch {
+                machine.state
+                    .onSubscription { stateCollectorReady.complete(Unit) }
+                    .collect { st ->
+                        myState.value = st
+                        _events.tryEmit(AssemblyEvent(kind = "state", state = st, orderId = orderId))
+                    }
+            }
+
+            val logCollector = launch {
+                machine.logs
+                    .onSubscription { logCollectorReady.complete(Unit) }
+                    .collect { msg ->
+                        _events.tryEmit(AssemblyEvent(kind = "log", message = msg, orderId = orderId))
+                    }
+            }
+
+            stateCollectorReady.await()
+            logCollectorReady.await()
+            machine.run(orderBlueprint, orderId = orderId)
+            stateCollector.cancelAndJoin()
+            logCollector.cancelAndJoin()
         }
+
+        machineJob.invokeOnCompletion {
+            perRunAutopilot?.cancel()
+            orderStates[orderId]?.value = machine.state.value
+            confirmations.remove(orderId)
+            arrivals.remove(orderId)
+            validations.remove(orderId)
+            orderScope.cancel()
+        }
+
+        return orderCreated.await()
     }
 
-    override fun confirmCurrentOrder(accepted: Boolean) {
-        currentConfirmation?.value = accepted
+    override fun confirmOrder(orderId: String, accepted: Boolean) {
+        confirmations[orderId]?.let { it.value = accepted }
     }
-    override fun signalTransportArrived() {
-        currentArrival?.value = true
+
+    override fun signalTransportArrived(orderId: String) {
+        arrivals[orderId]?.let { it.value = true }
     }
-    override fun validateAssembly(valid: Boolean) {
-        currentValidation?.value = if (valid) ValidationOutcome.VALID else ValidationOutcome.INVALID
+
+    override fun validateAssembly(orderId: String, valid: Boolean) {
+        validations[orderId]?.let { it.value = if (valid) ValidationOutcome.VALID else ValidationOutcome.INVALID }
     }
 
     override fun demoAutopilot(
@@ -139,7 +196,7 @@ class AssemblyService : IAssemblyService, AutoCloseable {
         deliverAfterMs: Long,
         validateAfterMs: Long,
         valid: Boolean
-    ) { /* no-op: per-run autopilot handled inside runOne via demo flag */ }
+    ) { }
 
     override fun close() {
         job.cancel()
