@@ -1,5 +1,5 @@
 plugins {
-	kotlin("jvm") version "1.9.25"
+	kotlin("jvm") version "2.1.20"
 	kotlin("plugin.spring") version "1.9.25"
 	id("org.springframework.boot") version "3.5.7"
 	id("io.spring.dependency-management") version "1.1.7"
@@ -26,10 +26,10 @@ repositories {
 }
 
 dependencies {
-	project(":domain")
-	project(":repositories")
-	project(":http")
-	project(":services")
+	implementation(project(":domain"))
+	implementation(project(":repositories"))
+	implementation(project(":http"))
+	implementation(project(":services"))
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-webflux")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
@@ -45,6 +45,7 @@ dependencies {
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
 	testImplementation("org.springframework.kafka:spring-kafka-test")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	implementation("org.postgresql:postgresql:42.6.0")
 }
 
 kotlin {
