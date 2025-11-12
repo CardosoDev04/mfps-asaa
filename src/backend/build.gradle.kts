@@ -26,10 +26,10 @@ repositories {
 }
 
 dependencies {
-	project(":domain")
-	project(":repositories")
-	project(":http")
-	project(":services")
+	implementation(project(":domain"))
+	implementation(project(":repositories"))
+	implementation(project(":http"))
+	implementation(project(":services"))
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-webflux")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")

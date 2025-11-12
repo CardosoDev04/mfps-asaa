@@ -1,5 +1,8 @@
 plugins {
     kotlin("jvm")
+    kotlin("plugin.spring") version "1.9.25"
+    id("org.springframework.boot") version "3.5.7"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "com.group9.asaa"
@@ -10,7 +13,7 @@ repositories {
 }
 
 dependencies {
-    project(":domain")
+    implementation(project(":domain"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
