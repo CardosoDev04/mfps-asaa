@@ -18,7 +18,19 @@ data class AssemblyPorts(
     val notifyStatus: suspend (state: AssemblyTransportOrderStates) -> Unit,
     val acquireAssemblyPermit: suspend () -> Unit,
     val releaseAssemblyPermit: suspend () -> Unit,
-    val log: suspend (String) -> Unit
+    val log: suspend (String) -> Unit,
+    val markOrderSent: suspend (orderId: String, sentAt: Long) -> Unit,
+    val markOrderConfirmed: suspend (
+        orderId: String,
+        confirmationAt: Long,
+        confirmationLatencyMs: Long
+    ) -> Unit,
+    val markOrderAccepted: suspend (orderId: String, acceptedAt: Long) -> Unit,
+    val markAssemblingStarted: suspend (
+        orderId: String,
+        assemblingStartedAt: Long,
+        acceptedToAssemblingMs: Long?
+    ) -> Unit
 )
 
 enum class ValidationOutcome { VALID, INVALID }
@@ -42,6 +54,10 @@ class AssemblyStateMachine(
 ) {
     private val _state = MutableStateFlow(AssemblySystemStates.IDLE)
     val state: StateFlow<AssemblySystemStates> = _state
+
+    private var sentAtMs: Long? = null
+    private var confirmationAtMs: Long? = null
+    private var acceptedAtMs: Long? = null
 
     private suspend fun log(msg: String) {
         ports.log(msg)
@@ -81,16 +97,32 @@ class AssemblyStateMachine(
             deliveryLocation = deliveryLocation
         )
         transition(AssemblySystemStates.ORDER_CREATED)
+        ports.log("Created assembly transport order ${order.orderId} with ${order.components.size} components.")
 
         transition(AssemblySystemStates.SENDING_ORDER)
         ports.sendOrder(order)
+        ports.log("Sent assembly transport order ${order.orderId} with ${order.components.size} components.")
+        val sentNow = System.currentTimeMillis()
+        sentAtMs = sentNow
+        ports.markOrderSent(order.orderId, sentNow)
 
         transition(AssemblySystemStates.RECEIVING_CONFIRMATION)
+        log("Awaiting confirmation for order ${order.orderId}...")
         val confirmation: Boolean? = withTimeoutOrNull(timeouts.confirmationTimeout) {
             ports.awaitOrderConfirmation()
         }
 
         transition(AssemblySystemStates.EVALUATING_CONFIRMATION)
+        log("Evaluating confirmation for order ${order.orderId}...")
+
+        val confirmationNow = System.currentTimeMillis()
+        confirmationAtMs = confirmationNow
+        ports.markOrderConfirmed(
+            order.orderId,
+            confirmationNow,
+            confirmationNow - (sentAtMs ?: confirmationNow)
+        )
+
         when (confirmation) {
             null -> {
                 return finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ORDER_TIMED_OUT)
@@ -100,11 +132,16 @@ class AssemblyStateMachine(
             }
             true -> {
                 transition(AssemblySystemStates.ORDER_ACCEPTED)
+                val acceptedNow = System.currentTimeMillis()
+                acceptedAtMs = acceptedNow
+                ports.markOrderAccepted(order.orderId, acceptedNow)
                 notifyStatusOnly(AssemblyTransportOrderStates.ACCEPTED)
+                log("Order ${order.orderId} accepted for assembly.")
             }
         }
 
         transition(AssemblySystemStates.WAITING_FOR_TRANSPORT)
+        log("Waiting for transport arrival for order ${order.orderId}...")
         val delivered = withTimeoutOrNull(timeouts.deliveryTimeout) {
             ports.awaitTransportArrival()
         } ?: false
@@ -117,6 +154,14 @@ class AssemblyStateMachine(
         try {
             transition(AssemblySystemStates.ASSEMBLING)
             notifyStatusOnly(AssemblyTransportOrderStates.IN_PROGRESS)
+            log("Transport arrived for order ${order.orderId}. Starting assembly...")
+
+            val assemblingNow = System.currentTimeMillis()
+            val acceptedToAsm =
+                acceptedAtMs?.let { acc -> assemblingNow - acc }
+
+            ports.markAssemblingStarted(order.orderId, assemblingNow, acceptedToAsm)
+
             val validation = withTimeoutOrNull(timeouts.validationTimeout) {
                 ports.performAssemblyAndValidate()
             }
