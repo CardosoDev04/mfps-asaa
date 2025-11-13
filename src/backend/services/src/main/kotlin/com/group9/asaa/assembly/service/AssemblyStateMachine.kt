@@ -4,9 +4,7 @@ import com.group9.asaa.classes.assembly.*
 import com.group9.asaa.misc.Locations
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
@@ -19,7 +17,8 @@ data class AssemblyPorts(
     val performAssemblyAndValidate: suspend () -> ValidationOutcome?,
     val notifyStatus: suspend (state: AssemblyTransportOrderStates) -> Unit,
     val acquireAssemblyPermit: suspend () -> Unit,
-    val releaseAssemblyPermit: suspend () -> Unit
+    val releaseAssemblyPermit: suspend () -> Unit,
+    val log: suspend (String) -> Unit
 )
 
 enum class ValidationOutcome { VALID, INVALID }
@@ -44,12 +43,13 @@ class AssemblyStateMachine(
     private val _state = MutableStateFlow(AssemblySystemStates.IDLE)
     val state: StateFlow<AssemblySystemStates> = _state
 
-    private val _logs = MutableSharedFlow<String>(extraBufferCapacity = 64)
-    val logs: SharedFlow<String> = _logs
+    private suspend fun log(msg: String) {
+        ports.log(msg)
+    }
 
-    private fun transition(to: AssemblySystemStates) {
+    private suspend fun transition(to: AssemblySystemStates) {
         _state.value = to
-        _logs.tryEmit("Transition → $to")
+        log("Transition → $to")
     }
 
     private suspend fun notifyStatusOnly(s: AssemblyTransportOrderStates) {
@@ -61,8 +61,9 @@ class AssemblyStateMachine(
         reported: AssemblyTransportOrderStates,
         finalSystemState: AssemblySystemStates
     ): AssemblyResult {
-        notifyStatusOnly(reported)
         transition(finalSystemState)
+        notifyStatusOnly(reported)
+        log("Finish order ${order.orderId}: finalState=$finalSystemState, reported=$reported")
         return AssemblyResult(order, state.value, reported)
     }
 

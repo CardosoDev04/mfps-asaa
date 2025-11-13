@@ -51,12 +51,6 @@ class AssemblyService : IAssemblyService, AutoCloseable {
     override fun getAssemblySystemState(): AssemblySystemStates =
         _overallSystemState.value
 
-    fun observeOrderSystemState(orderId: String): StateFlow<AssemblySystemStates> =
-        orderStates.computeIfAbsent(orderId) { MutableStateFlow(AssemblySystemStates.IDLE) }
-
-    fun getOrderSystemState(orderId: String): AssemblySystemStates =
-        orderStates[orderId]?.value ?: AssemblySystemStates.IDLE
-
     init {
         scope.launch {
             for (req in queue) {
@@ -87,7 +81,6 @@ class AssemblyService : IAssemblyService, AutoCloseable {
         val confirmationFlow = MutableStateFlow<Boolean?>(null)
         val transportArrivedFlow = MutableStateFlow(false)
         val validationFlow = MutableStateFlow<ValidationOutcome?>(null)
-
         val orderCreated = CompletableDeferred<AssemblyTransportOrder>()
 
         val ports = AssemblyPorts(
@@ -100,7 +93,10 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             },
             awaitOrderConfirmation = { confirmationFlow.filterNotNull().first() },
             awaitTransportArrival = { transportArrivedFlow.filter { it }.first() },
-            performAssemblyAndValidate = { validationFlow.filterNotNull().first() },
+            performAssemblyAndValidate = {
+                delay((10..20).random() * 1_000L)
+                ValidationOutcome.VALID
+            },
             notifyStatus = { state ->
                 _events.tryEmit(
                     AssemblyEvent(kind = "status", message = state.name, orderId = orderId)
@@ -113,6 +109,11 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             releaseAssemblyPermit = {
                 assemblyGate.release()
                 _overallSystemState.value = AssemblySystemStates.IDLE
+            },
+            log = { msg ->
+                _events.tryEmit(
+                    AssemblyEvent(kind = "log", message = msg, orderId = orderId)
+                )
             }
         )
 
@@ -139,40 +140,37 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             }
         } else null
 
+        // collector just mirrors machine.state into per-order state + SSE
+        val stateCollector = orderScope.launch {
+            machine.state.collect { st ->
+                myState.value = st
+                _events.tryEmit(AssemblyEvent(kind = "state", state = st, orderId = orderId))
+            }
+        }
+
         val machineJob = orderScope.launch {
-            val stateCollectorReady = CompletableDeferred<Unit>()
-            val logCollectorReady = CompletableDeferred<Unit>()
-
-            val stateCollector = launch {
-                machine.state
-                    .onSubscription { stateCollectorReady.complete(Unit) }
-                    .collect { st ->
-                        myState.value = st
-                        _events.tryEmit(AssemblyEvent(kind = "state", state = st, orderId = orderId))
-                    }
-            }
-
-            val logCollector = launch {
-                machine.logs
-                    .onSubscription { logCollectorReady.complete(Unit) }
-                    .collect { msg ->
-                        _events.tryEmit(AssemblyEvent(kind = "log", message = msg, orderId = orderId))
-                    }
-            }
-
-            stateCollectorReady.await()
-            logCollectorReady.await()
             machine.run(orderBlueprint, orderId = orderId)
-            stateCollector.cancelAndJoin()
-            logCollector.cancelAndJoin()
         }
 
         machineJob.invokeOnCompletion {
             perRunAutopilot?.cancel()
-            orderStates[orderId]?.value = machine.state.value
+
+            val finalState = machine.state.value
+            orderStates[orderId]?.value = finalState
+
+            // ensure frontend sees the final state, even if collector missed it
+            _events.tryEmit(
+                AssemblyEvent(
+                    kind = "state",
+                    state = finalState,
+                    orderId = orderId
+                )
+            )
+
             confirmations.remove(orderId)
             arrivals.remove(orderId)
             validations.remove(orderId)
+
             orderScope.cancel()
         }
 
