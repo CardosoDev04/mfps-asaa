@@ -6,7 +6,7 @@ import com.group9.asaa.classes.assembly.Blueprint
 import kotlinx.coroutines.flow.StateFlow
 
 interface IAssemblyService {
-    suspend fun createOrder(orderBlueprint: Blueprint, demo: Boolean = false): AssemblyTransportOrder
+    suspend fun createOrder(orderBlueprint: Blueprint, demo: Boolean = false, testRunId: String? = null): AssemblyTransportOrder
 
     fun observeAssemblySystemState(): StateFlow<AssemblySystemStates>
     fun getAssemblySystemState(): AssemblySystemStates
