@@ -30,7 +30,8 @@ class AssemblyController(
     @PostMapping("/transport-order/bulk")
     suspend fun bulk(
         @RequestParam(defaultValue = "10") n: Int,
-        @RequestParam(defaultValue = "false") demo: Boolean
+        @RequestParam(defaultValue = "false") demo: Boolean,
+        @RequestParam testRunId: String
     ): ResponseEntity<List<AssemblyTransportOrder>> {
         val created = mutableListOf<AssemblyTransportOrder>()
         repeat(n) { idx ->
@@ -40,7 +41,7 @@ class AssemblyController(
                 components = emptyList(),
                 attachments = emptyList()
             )
-            created += assemblyService.createOrder(bp, demo)
+            created += assemblyService.createOrder(bp, demo, testRunId)
         }
         return ResponseEntity.ok(created)
     }

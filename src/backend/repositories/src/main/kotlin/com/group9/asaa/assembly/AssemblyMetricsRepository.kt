@@ -9,18 +9,20 @@ class JdbiAssemblyMetricsRepository(
     private val systemWriterJdbi: Jdbi
 ) : IAssemblyMetricsRepository {
 
-    override fun markOrderSent(orderId: String, sentAt: Instant) {
+    override fun markOrderSent(orderId: String, sentAt: Instant, testRunId: String?) {
         systemWriterJdbi.withHandle<Unit, Exception> { handle ->
             handle.createUpdate(
                 """
-                INSERT INTO assembly_order_metrics (order_id, sent_at)
-                VALUES (:orderId, :sentAt)
+                INSERT INTO assembly_order_metrics (order_id, sent_at, test_run_id)
+                VALUES (:orderId, :sentAt, :testRunId)
                 ON CONFLICT (order_id) DO UPDATE
-                SET sent_at = EXCLUDED.sent_at
+                SET sent_at = EXCLUDED.sent_at,
+                    test_run_id = COALESCE(assembly_order_metrics.test_run_id, EXCLUDED.test_run_id);
                 """
             )
                 .bind("orderId", orderId)
                 .bind("sentAt", sentAt)
+                .bind("testRunId", testRunId)
                 .execute()
         }
     }
@@ -37,7 +39,7 @@ class JdbiAssemblyMetricsRepository(
                 VALUES (:orderId, :confirmationAt, :latency)
                 ON CONFLICT (order_id) DO UPDATE
                 SET confirmation_at         = EXCLUDED.confirmation_at,
-                    confirmation_latency_ms = EXCLUDED.confirmation_latency_ms
+                    confirmation_latency_ms = EXCLUDED.confirmation_latency_ms;
                 """
             )
                 .bind("orderId", orderId)
@@ -54,7 +56,7 @@ class JdbiAssemblyMetricsRepository(
                 INSERT INTO assembly_order_metrics (order_id, accepted_at)
                 VALUES (:orderId, :acceptedAt)
                 ON CONFLICT (order_id) DO UPDATE
-                SET accepted_at = EXCLUDED.accepted_at
+                SET accepted_at = EXCLUDED.accepted_at;
                 """
             )
                 .bind("orderId", orderId)
@@ -71,19 +73,23 @@ class JdbiAssemblyMetricsRepository(
         systemWriterJdbi.withHandle<Unit, Exception> { handle ->
             handle.createUpdate(
                 """
-                INSERT INTO assembly_order_metrics (order_id, assembling_started_at, accepted_to_assembling_ms)
-                VALUES (:orderId, :assemblingStartedAt, :dur)
-                ON CONFLICT (order_id) DO UPDATE
-                SET assembling_started_at     = EXCLUDED.assembling_started_at,
-                    accepted_to_assembling_ms = COALESCE(EXCLUDED.accepted_to_assembling_ms,
-                                                          assembly_order_metrics.accepted_to_assembling_ms)
-                """
+            INSERT INTO assembly_order_metrics (
+                order_id,
+                assembling_started_at,
+                accepted_to_assembling_ms
+            )
+            VALUES (:orderId, :assemblingStartedAt, :durationMs)
+            ON CONFLICT (order_id) DO UPDATE
+            SET assembling_started_at      = EXCLUDED.assembling_started_at,
+                accepted_to_assembling_ms  = EXCLUDED.accepted_to_assembling_ms;
+            """
             )
                 .bind("orderId", orderId)
                 .bind("assemblingStartedAt", assemblingStartedAt)
-                .bind("dur", acceptedToAssemblingMs)
+                .bind("durationMs", acceptedToAssemblingMs)   // ✅ FIXED
                 .execute()
         }
     }
+
 }
 

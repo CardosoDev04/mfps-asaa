@@ -159,9 +159,10 @@ export default function AssemblyDashboard() {
 
   async function createBulk() {
     setCreating(true);
+    const testRunId = Math.random().toString(36).substring(2, 14);
     try {
       const res = await fetch(
-        `http://localhost:8080/assembly/transport-order/bulk?n=${count}&demo=${demo}`,
+        `http://localhost:8080/assembly/transport-order/bulk?n=${count}&demo=${demo}&testRunId=${testRunId}`,
         { method: "POST" }
       );
       const list: AssemblyTransportOrder[] = await res.json();

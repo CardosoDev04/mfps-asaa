@@ -41,7 +41,8 @@ class AssemblyService(
     private data class Enqueued(
         val blueprint: Blueprint,
         val demo: Boolean,
-        val reply: CompletableDeferred<AssemblyTransportOrder>
+        val reply: CompletableDeferred<AssemblyTransportOrder>,
+        val testRunId: String? = null
     )
 
     private val queue = Channel<Enqueued>(capacity = 100)
@@ -58,7 +59,7 @@ class AssemblyService(
         scope.launch {
             for (req in queue) {
                 try {
-                    val created = runOne(req.blueprint, req.demo)
+                    val created = runOne(req.blueprint, req.demo, req.testRunId)
                     req.reply.complete(created)
                 } catch (t: Throwable) {
                     req.reply.completeExceptionally(t)
@@ -69,15 +70,15 @@ class AssemblyService(
         }
     }
 
-    override suspend fun createOrder(orderBlueprint: Blueprint, demo: Boolean): AssemblyTransportOrder {
+    override suspend fun createOrder(orderBlueprint: Blueprint, demo: Boolean, testRunId: String?): AssemblyTransportOrder {
         val reply = CompletableDeferred<AssemblyTransportOrder>()
-        val offered = queue.trySend(Enqueued(orderBlueprint, demo, reply))
+        val offered = queue.trySend(Enqueued(orderBlueprint, demo, reply, testRunId))
         if (offered.isFailure) throw IllegalStateException("Order queue is full (100). Try again later.")
         _queueSize.update { it + 1 }
         return reply.await()
     }
 
-    private suspend fun runOne(orderBlueprint: Blueprint, demo: Boolean): AssemblyTransportOrder {
+    private suspend fun runOne(orderBlueprint: Blueprint, demo: Boolean, testRunId: String?): AssemblyTransportOrder {
         val orderId = "order-${UUID.randomUUID()}"
         val myState = orderStates.computeIfAbsent(orderId) { MutableStateFlow(AssemblySystemStates.IDLE) }
 
@@ -121,7 +122,8 @@ class AssemblyService(
             markOrderSent = { oid, sentAtMs ->
                 metricsRepo.markOrderSent(
                     oid,
-                    java.time.Instant.ofEpochMilli(sentAtMs)
+                    java.time.Instant.ofEpochMilli(sentAtMs),
+                    testRunId = testRunId
                 )
             },
             markOrderConfirmed = { oid, confAtMs, latencyMs ->
