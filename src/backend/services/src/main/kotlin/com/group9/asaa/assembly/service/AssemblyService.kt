@@ -1,5 +1,6 @@
 package com.group9.asaa.assembly.service
 
+import com.group9.asaa.assembly.IAssemblyMetricsRepository
 import com.group9.asaa.classes.assembly.AssemblyEvent
 import com.group9.asaa.classes.assembly.AssemblySystemStates
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
@@ -15,7 +16,9 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 
 @Service
-class AssemblyService : IAssemblyService, AutoCloseable {
+class AssemblyService(
+    private val metricsRepo: IAssemblyMetricsRepository
+) : IAssemblyService, AutoCloseable {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Default + job)
@@ -114,7 +117,33 @@ class AssemblyService : IAssemblyService, AutoCloseable {
                 _events.tryEmit(
                     AssemblyEvent(kind = "log", message = msg, orderId = orderId)
                 )
-            }
+            },
+            markOrderSent = { oid, sentAtMs ->
+                metricsRepo.markOrderSent(
+                    oid,
+                    java.time.Instant.ofEpochMilli(sentAtMs)
+                )
+            },
+            markOrderConfirmed = { oid, confAtMs, latencyMs ->
+                metricsRepo.markOrderConfirmed(
+                    oid,
+                    java.time.Instant.ofEpochMilli(confAtMs),
+                    latencyMs
+                )
+            },
+            markOrderAccepted = { oid, accAtMs ->
+                metricsRepo.markOrderAccepted(
+                    oid,
+                    java.time.Instant.ofEpochMilli(accAtMs)
+                )
+            },
+            markAssemblingStarted = { oid, asmAtMs, durationMs ->
+                metricsRepo.markAssemblingStarted(
+                    oid,
+                    java.time.Instant.ofEpochMilli(asmAtMs),
+                    durationMs
+                )
+            },
         )
 
         val orderScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
@@ -140,14 +169,27 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             }
         } else null
 
-        // collector just mirrors machine.state into per-order state + SSE
-        val stateCollector = orderScope.launch {
-            machine.state.collect { st ->
-                myState.value = st
-                _events.tryEmit(AssemblyEvent(kind = "state", state = st, orderId = orderId))
-            }
+        // 🔹 1) Start the collector and signal when it has subscribed
+        val stateCollectorReady = CompletableDeferred<Unit>()
+        orderScope.launch {
+            machine.state
+                .onSubscription { stateCollectorReady.complete(Unit) }
+                .collect { st ->
+                    myState.value = st
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "state",
+                            state = st,
+                            orderId = orderId
+                        )
+                    )
+                }
         }
 
+        // 🔹 2) Wait until the collector is definitely listening
+        stateCollectorReady.await()
+
+        // 🔹 3) Only now run the state machine — no early states can be missed
         val machineJob = orderScope.launch {
             machine.run(orderBlueprint, orderId = orderId)
         }
@@ -158,7 +200,7 @@ class AssemblyService : IAssemblyService, AutoCloseable {
             val finalState = machine.state.value
             orderStates[orderId]?.value = finalState
 
-            // ensure frontend sees the final state, even if collector missed it
+            // Make sure final state is visible even if last emission races with cancellation
             _events.tryEmit(
                 AssemblyEvent(
                     kind = "state",
