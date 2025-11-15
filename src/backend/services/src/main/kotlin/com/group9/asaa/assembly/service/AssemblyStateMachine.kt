@@ -30,7 +30,8 @@ data class AssemblyPorts(
         orderId: String,
         assemblingStartedAt: Long,
         acceptedToAssemblingMs: Long?
-    ) -> Unit
+    ) -> Unit,
+    val insertOrderWithState: suspend (order: AssemblyTransportOrder, state: AssemblyTransportOrderStates) -> Unit
 )
 
 enum class ValidationOutcome { VALID, INVALID }
@@ -68,7 +69,7 @@ class AssemblyStateMachine(
         log("Transition → $to")
     }
 
-    private suspend fun notifyStatusOnly(s: AssemblyTransportOrderStates) {
+    private suspend fun notifyStatus(s: AssemblyTransportOrderStates) {
         ports.notifyStatus(s)
     }
 
@@ -78,8 +79,9 @@ class AssemblyStateMachine(
         finalSystemState: AssemblySystemStates
     ): AssemblyResult {
         transition(finalSystemState)
-        notifyStatusOnly(reported)
+        notifyStatus(reported)
         log("Finish order ${order.orderId}: finalState=$finalSystemState, reported=$reported")
+        ports.insertOrderWithState(order, reported)
         return AssemblyResult(order, state.value, reported)
     }
 
@@ -135,7 +137,7 @@ class AssemblyStateMachine(
                 val acceptedNow = System.currentTimeMillis()
                 acceptedAtMs = acceptedNow
                 ports.markOrderAccepted(order.orderId, acceptedNow)
-                notifyStatusOnly(AssemblyTransportOrderStates.ACCEPTED)
+                notifyStatus(AssemblyTransportOrderStates.ACCEPTED)
                 log("Order ${order.orderId} accepted for assembly.")
             }
         }
@@ -153,7 +155,8 @@ class AssemblyStateMachine(
         ports.acquireAssemblyPermit()
         try {
             transition(AssemblySystemStates.ASSEMBLING)
-            notifyStatusOnly(AssemblyTransportOrderStates.IN_PROGRESS)
+            notifyStatus(AssemblyTransportOrderStates.IN_PROGRESS)
+            ports.insertOrderWithState(order, AssemblyTransportOrderStates.IN_PROGRESS)
             log("Transport arrived for order ${order.orderId}. Starting assembly...")
 
             val assemblingNow = System.currentTimeMillis()
