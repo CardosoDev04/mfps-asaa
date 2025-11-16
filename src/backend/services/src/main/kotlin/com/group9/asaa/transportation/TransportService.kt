@@ -68,7 +68,8 @@ class TransportService(
                 log.info("Transport service SENT ORDER_CONFIRMED for orderId={}", orderId)
 
                 // 2) After a small delay, signal that the transport has arrived
-                delay(5_000)
+                val randomDelay = (10..15).random() * 1000L
+                delay(randomDelay)
 
                 receiveStage.accept(
                     fromSubsystem = "transport",
