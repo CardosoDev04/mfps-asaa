@@ -1,8 +1,8 @@
 package com.group9.asaa.communication.service.sse
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.group9.asaa.communication.kafka.KafkaConfiguration
-import com.group9.asaa.communication.model.EventEnvelope
+import com.group9.asaa.classes.communication.model.EventEnvelope
+import com.group9.asaa.communication.service.kafka.KafkaConfiguration
 import jakarta.annotation.PostConstruct
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

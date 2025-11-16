@@ -1,15 +1,18 @@
 package com.group9.asaa.assembly.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.group9.asaa.assembly.IAssemblyMetricsRepository
 import com.group9.asaa.classes.assembly.AssemblyEvent
 import com.group9.asaa.classes.assembly.AssemblySystemStates
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
 import com.group9.asaa.classes.assembly.Blueprint
+import com.group9.asaa.communication.service.kafka.ReceiveStage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -17,11 +20,15 @@ import kotlin.time.Duration.Companion.seconds
 
 @Service
 class AssemblyService(
-    private val metricsRepo: IAssemblyMetricsRepository
+    private val metricsRepo: IAssemblyMetricsRepository,
+    private val receiveStage: ReceiveStage,
+    private val mapper: ObjectMapper
 ) : IAssemblyService, AutoCloseable {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Default + job)
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     private val _events = MutableSharedFlow<AssemblyEvent>(
         extraBufferCapacity = 512,
@@ -89,10 +96,26 @@ class AssemblyService(
 
         val ports = AssemblyPorts(
             sendOrder = { order ->
+                // Final domain order (ensure consistent orderId)
                 val final = order.copy(orderId = orderId)
+
+                // 🔹 register flows so external replies can drive this order
                 confirmations[orderId] = confirmationFlow
                 arrivals[orderId] = transportArrivedFlow
                 validations[orderId] = validationFlow
+
+                // 🔹 send to communication system as a TRANSPORT_ORDER to transport subsystem
+                val payloadJson = mapper.writeValueAsString(final)
+
+                receiveStage.accept(
+                    fromSubsystem = "assembly",
+                    toSubsystem = "transport",
+                    type = "TRANSPORT_ORDER",
+                    payload = payloadJson,
+                    correlationId = orderId      // this ties replies back to this assembly order
+                )
+
+                // 🔹 complete the "order created" future for the API caller
                 orderCreated.complete(final)
             },
             awaitOrderConfirmation = { confirmationFlow.filterNotNull().first() },
@@ -120,31 +143,75 @@ class AssemblyService(
                 )
             },
             markOrderSent = { oid, sentAtMs ->
-                metricsRepo.markOrderSent(
-                    oid,
-                    java.time.Instant.ofEpochMilli(sentAtMs),
-                    testRunId = testRunId
-                )
+                try {
+                    metricsRepo.markOrderSent(
+                        oid,
+                        java.time.Instant.ofEpochMilli(sentAtMs),
+                        testRunId = testRunId
+                    )
+                } catch (e: Exception) {
+                    log.error("markOrderSent failed for $oid: ${e.message}", e)
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "log",
+                            message = "markOrderSent failed for $oid: ${e.message}",
+                            orderId = orderId
+                        )
+                    )
+                }
             },
             markOrderConfirmed = { oid, confAtMs, latencyMs ->
-                metricsRepo.markOrderConfirmed(
-                    oid,
-                    java.time.Instant.ofEpochMilli(confAtMs),
-                    latencyMs
-                )
+                try {
+                    metricsRepo.markOrderConfirmed(
+                        oid,
+                        java.time.Instant.ofEpochMilli(confAtMs),
+                        latencyMs
+                    )
+                } catch (e: Exception) {
+                    log.error("markOrderConfirmed failed for $oid: ${e.message}", e)
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "log",
+                            message = "markOrderConfirmed failed for $oid: ${e.message}",
+                            orderId = orderId
+                        )
+                    )
+                }
             },
             markOrderAccepted = { oid, accAtMs ->
-                metricsRepo.markOrderAccepted(
-                    oid,
-                    java.time.Instant.ofEpochMilli(accAtMs)
-                )
+                try {
+                    metricsRepo.markOrderAccepted(
+                        oid,
+                        java.time.Instant.ofEpochMilli(accAtMs)
+                    )
+                } catch (e: Exception) {
+                    log.error("markOrderAccepted failed for $oid: ${e.message}", e)
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "log",
+                            message = "markOrderAccepted failed for $oid: ${e.message}",
+                            orderId = orderId
+                        )
+                    )
+                }
             },
             markAssemblingStarted = { oid, asmAtMs, durationMs ->
-                metricsRepo.markAssemblingStarted(
-                    oid,
-                    java.time.Instant.ofEpochMilli(asmAtMs),
-                    durationMs
-                )
+                try {
+                    metricsRepo.markAssemblingStarted(
+                        oid,
+                        java.time.Instant.ofEpochMilli(asmAtMs),
+                        durationMs
+                    )
+                } catch (e: Exception) {
+                    log.error("markAssemblingStarted failed for $oid: ${e.message}", e)
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "log",
+                            message = "markAssemblingStarted failed for $oid: ${e.message}",
+                            orderId = orderId
+                        )
+                    )
+                }
             },
         )
 
@@ -196,13 +263,23 @@ class AssemblyService(
             machine.run(orderBlueprint, orderId = orderId)
         }
 
-        machineJob.invokeOnCompletion {
+        machineJob.invokeOnCompletion { t ->
             perRunAutopilot?.cancel()
+
+            if (t != null) {
+                log.error("State machine FAILED for orderId=$orderId: ${t.message}", t)
+                _events.tryEmit(
+                    AssemblyEvent(
+                        kind = "log",
+                        message = "State machine FAILED for $orderId: ${t.message}",
+                        orderId = orderId
+                    )
+                )
+            }
 
             val finalState = machine.state.value
             orderStates[orderId]?.value = finalState
 
-            // Make sure final state is visible even if last emission races with cancellation
             _events.tryEmit(
                 AssemblyEvent(
                     kind = "state",

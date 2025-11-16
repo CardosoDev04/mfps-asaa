@@ -1,4 +1,4 @@
-package com.group9.asaa.classes.communication.state
+package com.group9.asaa.communication.service
 
 import com.group9.asaa.classes.communication.model.CommunicationMessage
 import com.group9.asaa.classes.communication.model.CommunicationState
@@ -19,21 +19,42 @@ object CommunicationStateMachine {
         val logEvent: EventEnvelope?
     )
 
-    fun onReceive(rawSubsystem: String, rawPayload: String, rawCorrelationId: String?): TransitionResult {
-        val messageId = UUID.randomUUID().toString() // For prod: use UUIDv7 library
-        // Basic validation / normalization
-        val subsystem = rawSubsystem.trim().lowercase()
+    fun onReceive(
+        rawFromSubsystem: String,
+        rawToSubsystem: String,
+        rawType: String,
+        rawPayload: String,
+        rawCorrelationId: String?
+    ): TransitionResult {
+        val messageId = UUID.randomUUID().toString()
+
+        val from = rawFromSubsystem.trim().lowercase()
+        val to = rawToSubsystem.trim().lowercase()
+        val type = rawType.trim().uppercase()  // or lowercase, but be consistent
         val payload = rawPayload.trim()
-        require(subsystem.isNotBlank()) { "subsystem blank" }
+        val correlationId = rawCorrelationId?.takeIf { it.isNotBlank() }
+
+        require(from.isNotBlank()) { "fromSubsystem blank" }
+        require(to.isNotBlank()) { "toSubsystem blank" }
+        require(type.isNotBlank()) { "type blank" }
         require(payload.isNotBlank()) { "payload blank" }
+
         val msg = CommunicationMessage(
             messageId = messageId,
-            subsystem = subsystem,
+            fromSubsystem = from,
+            toSubsystem = to,
+            type = type,
             payload = payload,
-            correlationId = rawCorrelationId?.takeIf { it.isNotBlank() },
+            correlationId = correlationId,
             state = CommunicationState.RECEIVED
         )
-        return buildTransition(msg, CommunicationState.RECEIVED, StatusMilestone.RECEIVED, "Message received")
+
+        return buildTransition(
+            msg,
+            CommunicationState.RECEIVED,
+            StatusMilestone.RECEIVED,
+            "Message received"
+        )
     }
 
     fun connect(message: CommunicationMessage, enrichment: Map<String, String>): TransitionResult {
@@ -81,7 +102,13 @@ object CommunicationStateMachine {
             timestamp = now,
             messageId = msg.messageId,
             correlationId = msg.correlationId,
-            data = mapOf("state" to newState.name, "attempts" to msg.attempts)
+            data = mapOf(
+                "state" to newState.name,
+                "attempts" to msg.attempts,
+                "from" to msg.fromSubsystem,
+                "to" to msg.toSubsystem,
+                "type" to msg.type
+            )
         )
         val statusEvent = EventEnvelope(
             id = msg.messageId + ":status:${milestone.name}",

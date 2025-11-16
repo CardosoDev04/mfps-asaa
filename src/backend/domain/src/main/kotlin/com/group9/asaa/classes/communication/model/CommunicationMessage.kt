@@ -8,15 +8,17 @@ import java.time.Instant
  */
 data class CommunicationMessage(
     val messageId: String,
-    val subsystem: String,
-    val payload: String, // Simplified; in real system use structured type.
-    val correlationId: String?,
-    val createdAt: Instant = Instant.now(),
+    val fromSubsystem: String,       // "assembly"
+    val toSubsystem: String,         // "transport"
+    val type: String,                // "TRANSPORT_ORDER", "ORDER_CONFIRMED", "TRANSPORT_ARRIVED"
+    val payload: String,             // JSON of business object (order, event, etc.)
+    val correlationId: String?,      // typically orderId
+    val state: CommunicationState,
     val metadata: Map<String, String> = emptyMap(),
-    val state: CommunicationState = CommunicationState.RECEIVED,
     val attempts: Int = 0,
     val lastError: String? = null
 )
+
 
 /**
  * Observability event envelope produced to notifications topic and fanned out via SSE.

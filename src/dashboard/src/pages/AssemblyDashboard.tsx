@@ -1,9 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type AssemblySystemStates =
-  | "IDLE" | "CREATING_ORDER" | "ORDER_CREATED" | "SENDING_ORDER" | "RECEIVING_CONFIRMATION"
-  | "EVALUATING_CONFIRMATION" | "ORDER_ACCEPTED" | "ORDER_DENIED" | "ORDER_TIMED_OUT"
-  | "WAITING_FOR_TRANSPORT" | "ASSEMBLING" | "ASSEMBLY_COMPLETED" | "ASSEMBLY_TIMED_OUT"
+  | "IDLE"
+  | "CREATING_ORDER"
+  | "ORDER_CREATED"
+  | "SENDING_ORDER"
+  | "RECEIVING_CONFIRMATION"
+  | "EVALUATING_CONFIRMATION"
+  | "ORDER_ACCEPTED"
+  | "ORDER_DENIED"
+  | "ORDER_TIMED_OUT"
+  | "WAITING_FOR_TRANSPORT"
+  | "ASSEMBLING"
+  | "ASSEMBLY_COMPLETED"
+  | "ASSEMBLY_TIMED_OUT"
   | "NOTIFYING_STATUS";
 
 type OrderStatus = "ACCEPTED" | "DENIED" | "COMPLETED";
@@ -86,15 +96,13 @@ export default function AssemblyDashboard() {
         const orderId = payload.orderId;
 
         setOrders((prev) => {
-          const current: OrderCard =
-            prev[orderId] ??
-            {
-              order: { orderId, components: [], deliveryLocation: "" },
-              logs: [],
-              events: [],
-              stateHistory: [],
-              statusHistory: [],
-            };
+          const current: OrderCard = prev[orderId] ?? {
+            order: { orderId, components: [], deliveryLocation: "" },
+            logs: [],
+            events: [],
+            stateHistory: [],
+            statusHistory: [],
+          };
 
           const next: OrderCard = {
             ...current,
@@ -103,16 +111,25 @@ export default function AssemblyDashboard() {
 
           if (type === "state" && payload.state) {
             next.lastState = payload.state;
-            next.stateHistory = [...current.stateHistory, { ts: payload.ts, state: payload.state }];
+            next.stateHistory = [
+              ...current.stateHistory,
+              { ts: payload.ts, state: payload.state },
+            ];
           }
 
           if (type === "status" && isKnownStatus(payload.message)) {
             next.lastStatus = payload.message;
-            next.statusHistory = [...current.statusHistory, { ts: payload.ts, status: payload.message }];
+            next.statusHistory = [
+              ...current.statusHistory,
+              { ts: payload.ts, status: payload.message },
+            ];
           }
 
           if (type === "log" && payload.message) {
-            next.logs = [...current.logs, { ts: payload.ts, msg: payload.message }];
+            next.logs = [
+              ...current.logs,
+              { ts: payload.ts, msg: payload.message },
+            ];
           }
 
           return { ...prev, [orderId]: next };
@@ -122,8 +139,12 @@ export default function AssemblyDashboard() {
       }
     };
 
-    es.addEventListener("state", (e) => handleEvent("state", e as MessageEvent));
-    es.addEventListener("status", (e) => handleEvent("status", e as MessageEvent));
+    es.addEventListener("state", (e) =>
+      handleEvent("state", e as MessageEvent)
+    );
+    es.addEventListener("status", (e) =>
+      handleEvent("status", e as MessageEvent)
+    );
     es.addEventListener("log", (e) => handleEvent("log", e as MessageEvent));
 
     es.onerror = (err) => {
@@ -142,15 +163,22 @@ export default function AssemblyDashboard() {
   async function createOne() {
     setCreating(true);
     try {
-      const res = await fetch(`http://localhost:8080/assembly/transport-order?demo=${demo}`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `http://localhost:8080/assembly/transport-order?demo=${demo}`,
+        {
+          method: "POST",
+        }
+      );
       const order: AssemblyTransportOrder = await res.json();
       setOrders((prev) => ({
         ...prev,
-        [order.orderId]:
-          prev[order.orderId] ??
-          { order, logs: [], events: [], stateHistory: [], statusHistory: [] },
+        [order.orderId]: prev[order.orderId] ?? {
+          order,
+          logs: [],
+          events: [],
+          stateHistory: [],
+          statusHistory: [],
+        },
       }));
     } finally {
       setCreating(false);
@@ -187,15 +215,34 @@ export default function AssemblyDashboard() {
   }
 
   const orderList = useMemo(
-    () => Object.values(orders).sort((a, b) => (a.order.orderId < b.order.orderId ? 1 : -1)),
+    () =>
+      Object.values(orders).sort((a, b) =>
+        a.order.orderId < b.order.orderId ? 1 : -1
+      ),
     [orders]
   );
 
   return (
-    <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Assembly Orders</h1>
+    <div
+      className="flex w-full h-full"
+      style={{
+        padding: 16,
+        margin: "0 auto",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
+        Assembly Orders
+      </h1>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          marginBottom: 16,
+        }}
+      >
         <label>
           Count:&nbsp;
           <input
@@ -207,7 +254,11 @@ export default function AssemblyDashboard() {
           />
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={demo}
+            onChange={(e) => setDemo(e.target.checked)}
+          />
           demo
         </label>
         <button onClick={createOne} disabled={creating} style={btnStyle}>
@@ -218,13 +269,28 @@ export default function AssemblyDashboard() {
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+          gap: 12,
+        }}
+      >
         {orderList.map((oc) => {
           const prog = stateProgress(oc.lastState);
           return (
             <div key={oc.order.orderId} style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
-                <strong style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                  gap: 8,
+                }}
+              >
+                <strong
+                  style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                >
                   {oc.order.orderId}
                 </strong>
                 <span
@@ -246,18 +312,44 @@ export default function AssemblyDashboard() {
               </div>
 
               {/* Progress from machine state (not business status) */}
-              <div style={{ height: 8, background: "#F3F4F6", borderRadius: 6, overflow: "hidden" }} aria-label="state-progress">
-                <div style={{ width: `${prog}%`, height: "100%", background: "#BFDBFE" }} />
+              <div
+                style={{
+                  height: 8,
+                  background: "#F3F4F6",
+                  borderRadius: 6,
+                  overflow: "hidden",
+                }}
+                aria-label="state-progress"
+              >
+                <div
+                  style={{
+                    width: `${prog}%`,
+                    height: "100%",
+                    background: "#BFDBFE",
+                  }}
+                />
               </div>
 
               <details style={{ marginTop: 10 }}>
                 <summary style={{ cursor: "pointer" }}>
-                  Logs ({oc.logs.length}) · States ({oc.stateHistory.length}) · Statuses ({oc.statusHistory.length})
+                  Logs ({oc.logs.length}) · States ({oc.stateHistory.length}) ·
+                  Statuses ({oc.statusHistory.length})
                 </summary>
                 <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
                   <section>
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>State history</div>
-                    <ul style={{ marginTop: 4, paddingLeft: 16, maxHeight: 120, overflow: "auto" }}>
+                    <div
+                      style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}
+                    >
+                      State history
+                    </div>
+                    <ul
+                      style={{
+                        marginTop: 4,
+                        paddingLeft: 16,
+                        maxHeight: 120,
+                        overflow: "auto",
+                      }}
+                    >
                       {oc.stateHistory.map((h, i) => (
                         <li key={i} style={{ fontSize: 12 }}>
                           [{new Date(h.ts).toLocaleTimeString()}] {h.state}
@@ -266,8 +358,19 @@ export default function AssemblyDashboard() {
                     </ul>
                   </section>
                   <section>
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>Status history</div>
-                    <ul style={{ marginTop: 4, paddingLeft: 16, maxHeight: 120, overflow: "auto" }}>
+                    <div
+                      style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}
+                    >
+                      Status history
+                    </div>
+                    <ul
+                      style={{
+                        marginTop: 4,
+                        paddingLeft: 16,
+                        maxHeight: 120,
+                        overflow: "auto",
+                      }}
+                    >
                       {oc.statusHistory.map((h, i) => (
                         <li key={i} style={{ fontSize: 12 }}>
                           [{new Date(h.ts).toLocaleTimeString()}] {h.status}
@@ -276,8 +379,19 @@ export default function AssemblyDashboard() {
                     </ul>
                   </section>
                   <section>
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>Logs</div>
-                    <ul style={{ marginTop: 4, paddingLeft: 16, maxHeight: 120, overflow: "auto" }}>
+                    <div
+                      style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}
+                    >
+                      Logs
+                    </div>
+                    <ul
+                      style={{
+                        marginTop: 4,
+                        paddingLeft: 16,
+                        maxHeight: 120,
+                        overflow: "auto",
+                      }}
+                    >
                       {oc.logs.map((l, i) => (
                         <li key={i} style={{ fontSize: 12 }}>
                           [{new Date(l.ts).toLocaleTimeString()}] {l.msg}
