@@ -63,8 +63,10 @@ services:
       kafka:
         condition: service_started
     environment:
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/mfps-system?user=mfps&password=mfps
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mfps-system
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_BOOTSTRAP: kafka:9092
       SERVER_PORT: 8080
     ports:
       - "8080:8080"

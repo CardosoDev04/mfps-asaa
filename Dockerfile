@@ -1,4 +1,4 @@
-# Use an official base image, like Alpine, Ubuntu, Node, etc.
+do# Use an official base image, like Alpine, Ubuntu, Node, etc.
 # Alpine is lightweight, and thus generally faster to pull and build
 FROM node:14-alpine
 

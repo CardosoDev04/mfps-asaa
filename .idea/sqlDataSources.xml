@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DdlMappings">
+    <mapping uuid="80b72314-a0d3-4646-8a08-83a8171f7381" name="mfps-system@localhost Mapping">
+      <data-sources db="ad7aee82-9650-44c6-b19a-b08dcac4b086" />
+      <scope>
+        <node negative="1">
+          <node kind="database" negative="1" />
+          <node kind="database">
+            <name qname="mfps-system" />
+            <name qname="postgres" />
+            <node kind="schema" negative="1" />
+          </node>
+        </node>
+      </scope>
+    </mapping>
+  </component>
+</project>

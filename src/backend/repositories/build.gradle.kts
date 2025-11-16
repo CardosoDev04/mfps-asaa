@@ -40,6 +40,9 @@ dependencies {
     implementation("org.jdbi:jdbi3-postgres:3.50.0")
 }
 
+tasks.named("bootJar") { enabled = false }
+tasks.named("jar") { enabled = true }
+
 tasks.test {
     useJUnitPlatform()
 }
