@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type CommState =
   | "RECEIVED"
@@ -7,6 +7,7 @@ type CommState =
   | "SENT"
   | "NOTIFIED"
   | "FAILED";
+
 interface EventEnvelope {
   id: string;
   eventType: string;
@@ -15,6 +16,7 @@ interface EventEnvelope {
   correlationId?: string | null;
   data: Record<string, any>;
 }
+
 interface MessageCard {
   messageId: string;
   correlationId?: string | null;
@@ -44,11 +46,11 @@ function progress(state?: CommState): number {
   }
 }
 
-const badgeBg = (s?: CommState) => {
-  if (!s) return "#e5e7eb";
-  if (s === "FAILED") return "#fecaca";
-  if (s === "NOTIFIED") return "#bbf7d0";
-  return "#bfdbfe";
+const stateBadgeClass = (s?: CommState) => {
+  if (!s) return "bg-gray-100 border-gray-200";
+  if (s === "FAILED") return "bg-red-100 border-red-200";
+  if (s === "NOTIFIED") return "bg-green-100 border-green-200";
+  return "bg-blue-100 border-blue-200";
 };
 
 export default function CommunicationDashboard() {
@@ -62,6 +64,7 @@ export default function CommunicationDashboard() {
   useEffect(() => {
     if (esRef.current) return;
     const es = new EventSource("/api/communication/events");
+
     function handle(evtType: string, e: MessageEvent) {
       try {
         const env: EventEnvelope = JSON.parse(e.data);
@@ -75,6 +78,7 @@ export default function CommunicationDashboard() {
             statusHistory: [],
           };
           const next: MessageCard = { ...current };
+
           if (evtType === "state") {
             const st = env.data.state as CommState | undefined;
             if (st) {
@@ -86,6 +90,7 @@ export default function CommunicationDashboard() {
               ];
             }
           }
+
           if (evtType === "status") {
             const milestone = env.data.milestone as string | undefined;
             if (milestone) {
@@ -95,6 +100,7 @@ export default function CommunicationDashboard() {
               ];
             }
           }
+
           if (evtType === "log") {
             const msg = env.data.message as string | undefined;
             if (msg) {
@@ -104,16 +110,19 @@ export default function CommunicationDashboard() {
               ];
             }
           }
+
           return { ...prev, [mid]: next };
         });
       } catch (err) {
         console.error("Failed to parse event", err);
       }
     }
+
     es.addEventListener("state", (e) => handle("state", e as MessageEvent));
     es.addEventListener("status", (e) => handle("status", e as MessageEvent));
     es.addEventListener("log", (e) => handle("log", e as MessageEvent));
     es.onerror = (err) => console.warn("SSE error", err);
+
     esRef.current = es;
     return () => {
       es.close();
@@ -176,7 +185,6 @@ export default function CommunicationDashboard() {
     const corr = correlate ? cryptoRandomId() : undefined;
     try {
       for (let i = 1; i <= count; i++) {
-        // Slight pacing to keep UI responsive and Kafka readable
         // eslint-disable-next-line no-await-in-loop
         await postOne(i, corr);
       }
@@ -190,226 +198,140 @@ export default function CommunicationDashboard() {
 
   function cryptoRandomId() {
     try {
-      // Use Web Crypto if available
       const arr = new Uint8Array(8);
       crypto.getRandomValues(arr);
       return Array.from(arr)
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
     } catch {
-      // Fallback
       return Math.random().toString(36).slice(2, 10);
     }
   }
 
   return (
-    <div
-      className="flex w-full h-full"
-      style={{
-        padding: 16,
-        margin: "0 auto",
-        fontFamily: "system-ui,sans-serif",
-      }}
-    >
-      <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 12 }}>
-        Communication Messages
-      </h1>
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <label>
-          Count:&nbsp;
+    <div className="flex flex-col w-full h-full rounded-xl bg-white shadow-sm border border-gray-200 p-4">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="text-lg font-semibold">Communication Messages</h2>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <label className="flex items-center gap-2 text-sm">
+          <span>Count:</span>
           <input
             type="number"
             min={1}
             value={count}
             onChange={(e) => setCount(parseInt(e.target.value || "1", 10))}
-            style={{ width: 80, padding: 6 }}
+            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm"
           />
         </label>
-        <label>
-          Subsystem:&nbsp;
+
+        <label className="flex items-center gap-2 text-sm">
+          <span>Subsystem:</span>
           <input
             type="text"
             value={subsystem}
             onChange={(e) => setSubsystem(e.target.value)}
-            style={{ width: 160, padding: 6 }}
+            className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm"
           />
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+
+        <label className="inline-flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={correlate}
             onChange={(e) => setCorrelate(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
           />
-          same correlationId
+          <span>same correlationId</span>
         </label>
+
         <button
           onClick={createOne}
           disabled={creating}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            background: "#f6f6f6",
-            cursor: "pointer",
-          }}
+          className="inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 disabled:opacity-50"
         >
           Create 1
         </button>
         <button
           onClick={createBulk}
           disabled={creating}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            background: "#f6f6f6",
-            cursor: "pointer",
-          }}
+          className="inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 disabled:opacity-50"
         >
           Create {count}
         </button>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
-          gap: 12,
-        }}
-      >
+
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
         {list.map((m) => {
           const prog = progress(m.lastState);
           return (
             <div
               key={m.messageId}
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 10,
-                padding: 12,
-                background: "#fff",
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
+              className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 8,
-                }}
-              >
-                <strong
-                  style={{
-                    fontSize: 13,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {m.messageId}
-                </strong>
+              <div className="flex items-center justify-between gap-2">
+                <strong className="text-xs truncate">{m.messageId}</strong>
                 <span
-                  style={{
-                    fontSize: 12,
-                    padding: "2px 6px",
-                    borderRadius: 8,
-                    background: badgeBg(m.lastState),
-                    border: "1px solid #e5e7eb",
-                  }}
+                  className={`text-[11px] px-2 py-0.5 rounded-full border ${stateBadgeClass(
+                    m.lastState
+                  )}`}
                 >
                   {m.lastState ?? "—"}
                 </span>
               </div>
-              <div style={{ fontSize: 11, color: "#555" }}>
+
+              <div className="text-[11px] text-gray-600">
                 Correlation: {m.correlationId ?? "—"}
               </div>
-              <div
-                style={{
-                  height: 8,
-                  background: "#f3f4f6",
-                  borderRadius: 6,
-                  overflow: "hidden",
-                }}
-              >
+
+              <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  style={{
-                    width: `${prog}%`,
-                    height: "100%",
-                    background: m.failed ? "#f87171" : "#93c5fd",
-                  }}
+                  className={`h-full ${
+                    m.failed ? "bg-red-400" : "bg-blue-300"
+                  }`}
+                  style={{ width: `${prog}%` }}
                 />
               </div>
-              <details>
-                <summary style={{ cursor: "pointer", fontSize: 12 }}>
+
+              <details className="text-xs">
+                <summary className="cursor-pointer">
                   Details · States({m.stateHistory.length}) · Status(
                   {m.statusHistory.length}) · Logs({m.logs.length})
                 </summary>
-                <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+                <div className="grid gap-3 mt-2">
                   <section>
-                    <div
-                      style={{ fontWeight: 600, fontSize: 11, marginBottom: 4 }}
-                    >
+                    <div className="font-semibold text-[11px] mb-1">
                       State History
                     </div>
-                    <ul
-                      style={{
-                        margin: 0,
-                        paddingLeft: 16,
-                        maxHeight: 100,
-                        overflow: "auto",
-                      }}
-                    >
+                    <ul className="mt-0 pl-4 max-h-24 overflow-auto list-disc">
                       {m.stateHistory.map((h, i) => (
-                        <li key={i} style={{ fontSize: 11 }}>
+                        <li key={i} className="text-[11px]">
                           [{new Date(h.ts).toLocaleTimeString()}] {h.state}
                         </li>
                       ))}
                     </ul>
                   </section>
+
                   <section>
-                    <div
-                      style={{ fontWeight: 600, fontSize: 11, marginBottom: 4 }}
-                    >
+                    <div className="font-semibold text-[11px] mb-1">
                       Status History
                     </div>
-                    <ul
-                      style={{
-                        margin: 0,
-                        paddingLeft: 16,
-                        maxHeight: 100,
-                        overflow: "auto",
-                      }}
-                    >
+                    <ul className="mt-0 pl-4 max-h-24 overflow-auto list-disc">
                       {m.statusHistory.map((h, i) => (
-                        <li key={i} style={{ fontSize: 11 }}>
-                          [{new Date(h.ts).toLocaleTimeString()}] {h.milestone}
+                        <li key={i} className="text-[11px]">
+                          [{new Date(h.ts).toLocaleTimeString()}]{" "}
+                          {h.milestone}
                         </li>
                       ))}
                     </ul>
                   </section>
+
                   <section>
-                    <div
-                      style={{ fontWeight: 600, fontSize: 11, marginBottom: 4 }}
-                    >
-                      Logs
-                    </div>
-                    <ul
-                      style={{
-                        margin: 0,
-                        paddingLeft: 16,
-                        maxHeight: 100,
-                        overflow: "auto",
-                      }}
-                    >
+                    <div className="font-semibold text-[11px] mb-1">Logs</div>
+                    <ul className="mt-0 pl-4 max-h-24 overflow-auto list-disc">
                       {m.logs.map((l, i) => (
-                        <li key={i} style={{ fontSize: 11 }}>
+                        <li key={i} className="text-[11px]">
                           [{new Date(l.ts).toLocaleTimeString()}] {l.msg}
                         </li>
                       ))}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type AssemblySystemStates =
   | "IDLE"
@@ -46,7 +46,6 @@ const KNOWN_STATUSES: OrderStatus[] = ["ACCEPTED", "DENIED", "COMPLETED"];
 const isKnownStatus = (s?: string | null): s is OrderStatus =>
   !!s && (KNOWN_STATUSES as readonly string[]).includes(s);
 
-/** Derive coarse progress from state machine states (0–100) */
 function stateProgress(st?: AssemblySystemStates): number {
   switch (st) {
     case "CREATING_ORDER":
@@ -69,9 +68,22 @@ function stateProgress(st?: AssemblySystemStates): number {
     case "ORDER_DENIED":
     case "ORDER_TIMED_OUT":
     case "ASSEMBLY_TIMED_OUT":
-      return 100; // terminal, but not a success badge — status pill will communicate the outcome
+      return 100;
     default:
       return 0;
+  }
+}
+
+function statusBadgeBg(status?: OrderStatus) {
+  switch (status) {
+    case "COMPLETED":
+      return "bg-emerald-100 border-emerald-200";
+    case "ACCEPTED":
+      return "bg-sky-100 border-sky-200";
+    case "DENIED":
+      return "bg-rose-100 border-rose-200";
+    default:
+      return "bg-gray-100 border-gray-200";
   }
 }
 
@@ -82,12 +94,11 @@ export default function AssemblyDashboard() {
   const [orders, setOrders] = useState<Record<string, OrderCard>>({});
   const esRef = useRef<EventSource | null>(null);
 
-  // Open SSE once (or reconnect if closed)
   useEffect(() => {
     if (esRef.current) return;
 
     const es = new EventSource("http://localhost:8080/assembly/events");
-    es.onmessage = () => {}; // unused default
+    es.onmessage = () => {};
 
     const handleEvent = (type: "state" | "status" | "log", e: MessageEvent) => {
       try {
@@ -149,7 +160,6 @@ export default function AssemblyDashboard() {
 
     es.onerror = (err) => {
       console.error("EventSource error:", err);
-      // Optional: reconnection/backoff could go here
     };
 
     esRef.current = es;
@@ -223,177 +233,122 @@ export default function AssemblyDashboard() {
   );
 
   return (
-    <div
-      className="flex w-full h-full"
-      style={{
-        padding: 16,
-        margin: "0 auto",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
-        Assembly Orders
-      </h1>
+    <div className="flex flex-col w-full h-full rounded-xl bg-white shadow-sm border border-gray-200 p-4">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="text-lg font-semibold">Assembly Orders</h2>
+      </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <label>
-          Count:&nbsp;
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <label className="flex items-center gap-2 text-sm">
+          <span>Count:</span>
           <input
             type="number"
             min={1}
             value={count}
             onChange={(e) => setCount(parseInt(e.target.value || "1", 10))}
-            style={{ width: 80, padding: 6 }}
+            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm"
           />
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+
+        <label className="inline-flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={demo}
             onChange={(e) => setDemo(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
           />
-          demo
+          <span>demo</span>
         </label>
-        <button onClick={createOne} disabled={creating} style={btnStyle}>
+
+        <button
+          onClick={createOne}
+          disabled={creating}
+          className="inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 disabled:opacity-50"
+        >
           Create 1
         </button>
-        <button onClick={createBulk} disabled={creating} style={btnStyle}>
+        <button
+          onClick={createBulk}
+          disabled={creating}
+          className="inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 disabled:opacity-50"
+        >
           Create {count}
         </button>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: 12,
-        }}
-      >
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
         {orderList.map((oc) => {
           const prog = stateProgress(oc.lastState);
           return (
-            <div key={oc.order.orderId} style={cardStyle}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                  gap: 8,
-                }}
-              >
-                <strong
-                  style={{ overflow: "hidden", textOverflow: "ellipsis" }}
-                >
+            <div
+              key={oc.order.orderId}
+              className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm flex flex-col gap-2"
+            >
+              <div className="flex justify-between items-center mb-1 gap-2">
+                <strong className="truncate text-sm">
                   {oc.order.orderId}
                 </strong>
                 <span
+                  className={`text-xs px-2 py-0.5 rounded-full border ${statusBadgeBg(
+                    oc.lastStatus
+                  )}`}
                   title="Order status"
-                  style={{
-                    fontSize: 12,
-                    padding: "2px 6px",
-                    borderRadius: 8,
-                    background: badgeBg(oc.lastStatus),
-                    border: "1px solid #e5e7eb",
-                  }}
                 >
                   {oc.lastStatus ?? "—"}
                 </span>
               </div>
 
-              <div style={{ fontSize: 13, color: "#555", marginBottom: 6 }}>
+              <div className="text-xs text-gray-700 mb-1">
                 <strong>State:</strong> {oc.lastState ?? "—"}
               </div>
 
-              {/* Progress from machine state (not business status) */}
               <div
-                style={{
-                  height: 8,
-                  background: "#F3F4F6",
-                  borderRadius: 6,
-                  overflow: "hidden",
-                }}
+                className="h-2 w-full bg-gray-100 rounded-full overflow-hidden"
                 aria-label="state-progress"
               >
                 <div
-                  style={{
-                    width: `${prog}%`,
-                    height: "100%",
-                    background: "#BFDBFE",
-                  }}
+                  className="h-full bg-blue-300"
+                  style={{ width: `${prog}%` }}
                 />
               </div>
 
-              <details style={{ marginTop: 10 }}>
-                <summary style={{ cursor: "pointer" }}>
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer">
                   Logs ({oc.logs.length}) · States ({oc.stateHistory.length}) ·
                   Statuses ({oc.statusHistory.length})
                 </summary>
-                <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+                <div className="mt-2 grid gap-3">
                   <section>
-                    <div
-                      style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}
-                    >
+                    <div className="font-semibold text-xs mb-1">
                       State history
                     </div>
-                    <ul
-                      style={{
-                        marginTop: 4,
-                        paddingLeft: 16,
-                        maxHeight: 120,
-                        overflow: "auto",
-                      }}
-                    >
+                    <ul className="mt-1 pl-4 max-h-32 overflow-auto list-disc">
                       {oc.stateHistory.map((h, i) => (
-                        <li key={i} style={{ fontSize: 12 }}>
+                        <li key={i} className="text-xs">
                           [{new Date(h.ts).toLocaleTimeString()}] {h.state}
                         </li>
                       ))}
                     </ul>
                   </section>
+
                   <section>
-                    <div
-                      style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}
-                    >
+                    <div className="font-semibold text-xs mb-1">
                       Status history
                     </div>
-                    <ul
-                      style={{
-                        marginTop: 4,
-                        paddingLeft: 16,
-                        maxHeight: 120,
-                        overflow: "auto",
-                      }}
-                    >
+                    <ul className="mt-1 pl-4 max-h-32 overflow-auto list-disc">
                       {oc.statusHistory.map((h, i) => (
-                        <li key={i} style={{ fontSize: 12 }}>
+                        <li key={i} className="text-xs">
                           [{new Date(h.ts).toLocaleTimeString()}] {h.status}
                         </li>
                       ))}
                     </ul>
                   </section>
+
                   <section>
-                    <div
-                      style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}
-                    >
-                      Logs
-                    </div>
-                    <ul
-                      style={{
-                        marginTop: 4,
-                        paddingLeft: 16,
-                        maxHeight: 120,
-                        overflow: "auto",
-                      }}
-                    >
+                    <div className="font-semibold text-xs mb-1">Logs</div>
+                    <ul className="mt-1 pl-4 max-h-32 overflow-auto list-disc">
                       {oc.logs.map((l, i) => (
-                        <li key={i} style={{ fontSize: 12 }}>
+                        <li key={i} className="text-xs">
                           [{new Date(l.ts).toLocaleTimeString()}] {l.msg}
                         </li>
                       ))}
@@ -407,33 +362,4 @@ export default function AssemblyDashboard() {
       </div>
     </div>
   );
-}
-
-const btnStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#f6f6f6",
-  cursor: "pointer",
-};
-
-const cardStyle: React.CSSProperties = {
-  border: "1px solid #eee",
-  borderRadius: 12,
-  padding: 12,
-  background: "white",
-  boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-};
-
-function badgeBg(status?: OrderStatus) {
-  switch (status) {
-    case "COMPLETED":
-      return "#DCFCE7";
-    case "ACCEPTED":
-      return "#E0F2FE";
-    case "DENIED":
-      return "#FEE2E2";
-    default:
-      return "#F3F4F6";
-  }
 }

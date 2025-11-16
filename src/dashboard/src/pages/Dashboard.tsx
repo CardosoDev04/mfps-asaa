@@ -1,11 +1,17 @@
-import AssemblyDashboard from './AssemblyDashboard'
-import CommunicationDashboard from './CommunicationDashboard'
+import AssemblyDashboard from "./AssemblyDashboard";
+import CommunicationDashboard from "./CommunicationDashboard";
 
 export default function Dashboard() {
   return (
-    <div className='flex flex-col w-full h-full items-center justify-center'>
-      <AssemblyDashboard />
-      <CommunicationDashboard />
+    <div className="w-full h-full bg-slate-50 overflow-auto">
+      <div className="max-w-7xl mx-auto flex flex-col gap-6 p-4">
+        <h1 className="text-2xl font-bold mb-2">System Dashboard</h1>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+          <AssemblyDashboard />
+          <CommunicationDashboard />
+        </div>
+      </div>
     </div>
-  )
+  );
 }
