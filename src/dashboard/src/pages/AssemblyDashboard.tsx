@@ -11,6 +11,7 @@ type AssemblySystemStates =
   | "ORDER_DENIED"
   | "ORDER_TIMED_OUT"
   | "WAITING_FOR_TRANSPORT"
+  | "RECEIVED_TRANSPORT"
   | "ASSEMBLING"
   | "ASSEMBLY_COMPLETED"
   | "ASSEMBLY_TIMED_OUT"
@@ -61,6 +62,8 @@ function stateProgress(st?: AssemblySystemStates): number {
       return 40;
     case "WAITING_FOR_TRANSPORT":
       return 60;
+    case "RECEIVED_TRANSPORT":
+      return 70;
     case "ASSEMBLING":
       return 80;
     case "ASSEMBLY_COMPLETED":
@@ -89,7 +92,6 @@ function statusBadgeBg(status?: OrderStatus) {
 
 export default function AssemblyDashboard() {
   const [count, setCount] = useState(5);
-  const [demo, setDemo] = useState(true);
   const [creating, setCreating] = useState(false);
   const [orders, setOrders] = useState<Record<string, OrderCard>>({});
   const esRef = useRef<EventSource | null>(null);
@@ -174,7 +176,7 @@ export default function AssemblyDashboard() {
     setCreating(true);
     try {
       const res = await fetch(
-        `http://localhost:8080/assembly/transport-order?demo=${demo}`,
+        `http://localhost:8080/assembly/transport-order?demo=false`,
         {
           method: "POST",
         }
@@ -200,10 +202,24 @@ export default function AssemblyDashboard() {
     const testRunId = Math.random().toString(36).substring(2, 14);
     try {
       const res = await fetch(
-        `http://localhost:8080/assembly/transport-order/bulk?n=${count}&demo=${demo}&testRunId=${testRunId}`,
+        `http://localhost:8080/assembly/transport-order/bulk?n=${count}&demo=false&testRunId=${testRunId}`,
         { method: "POST" }
       );
-      const list: AssemblyTransportOrder[] = await res.json();
+
+      // Check if the response is OK
+      if (!res.ok) {
+        throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+      }
+
+      const list = await res.json();
+
+      // Ensure the response is an array
+      if (!Array.isArray(list)) {
+        throw new TypeError(
+          "Expected an array of orders, but received something else."
+        );
+      }
+
       setOrders((prev) => {
         const next = { ...prev };
         for (const order of list) {
@@ -219,6 +235,8 @@ export default function AssemblyDashboard() {
         }
         return next;
       });
+    } catch (error) {
+      console.error("Error in createBulk:", error);
     } finally {
       setCreating(false);
     }
@@ -250,16 +268,6 @@ export default function AssemblyDashboard() {
           />
         </label>
 
-        <label className="inline-flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={demo}
-            onChange={(e) => setDemo(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300"
-          />
-          <span>demo</span>
-        </label>
-
         <button
           onClick={createOne}
           disabled={creating}
@@ -285,9 +293,7 @@ export default function AssemblyDashboard() {
               className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm flex flex-col gap-2"
             >
               <div className="flex justify-between items-center mb-1 gap-2">
-                <strong className="truncate text-sm">
-                  {oc.order.orderId}
-                </strong>
+                <strong className="truncate text-sm">{oc.order.orderId}</strong>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full border ${statusBadgeBg(
                     oc.lastStatus

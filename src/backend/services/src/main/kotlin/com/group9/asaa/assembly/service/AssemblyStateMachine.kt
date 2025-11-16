@@ -144,24 +144,32 @@ class AssemblyStateMachine(
 
         transition(AssemblySystemStates.WAITING_FOR_TRANSPORT)
         log("Waiting for transport arrival for order ${order.orderId}...")
+
         val delivered = withTimeoutOrNull(timeouts.deliveryTimeout) {
             ports.awaitTransportArrival()
         } ?: false
 
         if (!delivered) {
-            return finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ORDER_TIMED_OUT)
+            // transport never came
+            return finishAndReturn(
+                order,
+                AssemblyTransportOrderStates.DENIED,
+                AssemblySystemStates.ORDER_TIMED_OUT
+            )
         }
+
+        transition(AssemblySystemStates.RECEIVED_TRANSPORT)
+        log("Transport arrived for order ${order.orderId}. Waiting for assembly slot...")
 
         ports.acquireAssemblyPermit()
         try {
             transition(AssemblySystemStates.ASSEMBLING)
             notifyStatus(AssemblyTransportOrderStates.IN_PROGRESS)
             ports.insertOrderWithState(order, AssemblyTransportOrderStates.IN_PROGRESS)
-            log("Transport arrived for order ${order.orderId}. Starting assembly...")
+            log("Starting assembly for order ${order.orderId}...")
 
             val assemblingNow = System.currentTimeMillis()
-            val acceptedToAsm =
-                acceptedAtMs?.let { acc -> assemblingNow - acc }
+            val acceptedToAsm = acceptedAtMs?.let { acc -> assemblingNow - acc }
 
             ports.markAssemblingStarted(order.orderId, assemblingNow, acceptedToAsm)
 
@@ -170,13 +178,25 @@ class AssemblyStateMachine(
             }
             return when (validation) {
                 null -> {
-                    finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ASSEMBLY_TIMED_OUT)
+                    finishAndReturn(
+                        order,
+                        AssemblyTransportOrderStates.DENIED,
+                        AssemblySystemStates.ASSEMBLY_TIMED_OUT
+                    )
                 }
                 ValidationOutcome.INVALID -> {
-                    finishAndReturn(order, AssemblyTransportOrderStates.DENIED, AssemblySystemStates.ASSEMBLY_INVALID)
+                    finishAndReturn(
+                        order,
+                        AssemblyTransportOrderStates.DENIED,
+                        AssemblySystemStates.ASSEMBLY_INVALID
+                    )
                 }
                 ValidationOutcome.VALID -> {
-                    finishAndReturn(order, AssemblyTransportOrderStates.COMPLETED, AssemblySystemStates.ASSEMBLY_COMPLETED)
+                    finishAndReturn(
+                        order,
+                        AssemblyTransportOrderStates.COMPLETED,
+                        AssemblySystemStates.ASSEMBLY_COMPLETED
+                    )
                 }
             }
         } finally {

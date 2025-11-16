@@ -1,5 +1,6 @@
 import AssemblyDashboard from "./AssemblyDashboard";
 import CommunicationDashboard from "./CommunicationDashboard";
+import TransportDashboard from "./TransportDashboard";
 
 export default function Dashboard() {
   return (
@@ -10,6 +11,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
           <AssemblyDashboard />
           <CommunicationDashboard />
+          <TransportDashboard />
         </div>
       </div>
     </div>

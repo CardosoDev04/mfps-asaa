@@ -224,7 +224,7 @@ class AssemblyService(
             scope = orderScope,
             ports = ports,
             timeouts = AssemblyTimeouts(
-                confirmationTimeout = 5.seconds,
+                confirmationTimeout = 10.seconds,
                 deliveryTimeout = 300.seconds,
                 validationTimeout = 40.seconds
             )
