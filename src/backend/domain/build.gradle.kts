@@ -36,3 +36,6 @@ tasks.test {
 kotlin {
     jvmToolchain(21)
 }
+
+tasks.named("bootJar") { enabled = false }
+tasks.named("jar") { enabled = true }

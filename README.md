@@ -130,3 +130,43 @@ You are free to import the latex source files into Overleaf.
 
 ![Alt text](images/githubactions.png)
 
+## Communication System (Kafka + SSE)
+This project includes a communication pipeline implemented in Kotlin/Spring with Kafka for durable transport and Server-Sent Events for frontend observability.
+
+Pipeline stages:
+1. ReceiveMessage -> validates and normalizes input, produces to `mfps.messages.inbound`.
+2. ConnectMessages -> enriches/correlates, transactional produce to `mfps.messages.connected` and notifications.
+3. SendMessage -> creates outbox record, produces to `mfps.messages.outbound`, later drained for delivery.
+4. NotifyMessage -> emits final notification events, produces to `mfps.notifications`.
+
+Topics:
+- `mfps.messages.inbound`
+- `mfps.messages.connected`
+- `mfps.messages.outbound`
+- `mfps.notifications`
+- `mfps.messages.dlq`
+
+HTTP API:
+- `POST /communication/messages` body `{ subsystem, payload, correlationId? }` -> `202 Accepted` with `messageId`.
+- `GET /communication/events` -> SSE stream with named events: `state`, `status`, `log` and heartbeat comments every ~15s.
+
+SSE Client (example in JS):
+```js
+const es = new EventSource('http://localhost:8080/communication/events');
+es.addEventListener('state', e => {
+  const data = JSON.parse(e.data); console.log('STATE', data);
+});
+es.addEventListener('status', e => {
+  const data = JSON.parse(e.data); console.log('STATUS', data);
+});
+es.addEventListener('log', e => {
+  const data = JSON.parse(e.data); console.log('LOG', data);
+});
+es.onerror = (err) => console.warn('SSE error', err);
+```
+
+Idempotent delivery uses outbox pattern (in-memory demo). Replace with Redis/Postgres for production durability. Each delivery uses header `Idempotency-Key: <messageId>`.
+
+Deduplication: per-message mutex ensures single in-flight processing per `messageId`.
+
+Observability: structured JSON events on notifications topic; SSE fan-out supports simple live dashboards.
