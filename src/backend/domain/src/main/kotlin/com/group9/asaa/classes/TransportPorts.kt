@@ -1,11 +1,12 @@
-package com.group9.asaa.transport
+package com.group9.asaa.classes.transport
 
-import kotlinx.coroutines.delay
+import com.group9.asaa.classes.transport.*
+import com.group9.asaa.classes.transport.OrderQueue
 import kotlin.time.Duration
 
 interface TransportPorts {
     suspend fun sendOrder(order: AssemblyTransportOrder)
-    suspend fun awaitConfirmation(): Boolean?               // true=accepted, false=denied, null=timeout
+    suspend fun awaitConfirmation(): Boolean?
     suspend fun acquireAGV(): AGV?
     suspend fun performTransport(agv: AGV, location: Locations)
     suspend fun releaseAGV(agv: AGV)
@@ -17,7 +18,6 @@ interface TransportPorts {
     suspend fun acceptOrder(orderId: String)
 }
 
-/** In-memory implementation used for demos / tests */
 class InMemoryTransportPorts(
     private val confirmationTimeout: Duration,
     private val deliveryTimeout: Duration,
@@ -32,7 +32,7 @@ class InMemoryTransportPorts(
     }
 
     override suspend fun awaitConfirmation(): Boolean? {
-        delay(confirmationTimeout.inWholeMilliseconds / 2)
+        kotlinx.coroutines.delay(confirmationTimeout.inWholeMilliseconds / 2)
         return if (simulateConfirmationFailure) false else true
     }
 
@@ -40,11 +40,11 @@ class InMemoryTransportPorts(
 
     override suspend fun performTransport(agv: AGV, location: Locations) {
         log("[${agv.id}] picking up parts …")
-        delay(500)
+        kotlinx.coroutines.delay(500)
         log("[${agv.id}] delivering to ${location} (≈${location.estimatedTimeFromWarehouseInMinutes} min) …")
-        delay(location.estimatedTimeFromWarehouseInMinutes * 60L)
+        kotlinx.coroutines.delay(location.estimatedTimeFromWarehouseInMinutes * 60_000L)
         log("[${agv.id}] returning home …")
-        delay(500)
+        kotlinx.coroutines.delay(500)
     }
 
     override suspend fun releaseAGV(agv: AGV) = AGVPool.release(agv)

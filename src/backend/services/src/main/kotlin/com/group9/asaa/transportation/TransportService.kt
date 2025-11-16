@@ -1,13 +1,13 @@
 package com.group9.asaa.transport.service
 
-import com.group9.asaa.transport.AssemblyTransportOrder
-import com.group9.asaa.transport.InMemoryTransportPorts
+import com.group9.asaa.classes.transport.*
+import com.group9.asaa.classes.transport.InMemoryTransportPorts
+import com.group9.asaa.classes.transport.OrderQueue
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.sync.withPermit
-import com.group9.asaa.transport.*
+import kotlin.time.Duration.Companion.seconds
 
 object TransportService {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
@@ -17,10 +17,7 @@ object TransportService {
     private val _orderStates = MutableStateFlow<Map<String, TransportSystemState>>(emptyMap())
     val orderStates: StateFlow<Map<String, TransportSystemState>> = _orderStates
 
-    private fun portsFor(
-        simulateTimeout: Boolean,
-        makeAgvUnavailable: Boolean
-    ): InMemoryTransportPorts {
+    private fun portsFor(simulateTimeout: Boolean, makeAgvUnavailable: Boolean): InMemoryTransportPorts {
         val confirmation = if (simulateTimeout) 1.seconds else 8.seconds
         return InMemoryTransportPorts(
             confirmationTimeout = confirmation,

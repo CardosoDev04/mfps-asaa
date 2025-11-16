@@ -1,10 +1,14 @@
 package com.group9.asaa.transport
 
+import com.group9.asaa.classes.transport.*               // <-- NEW: domain classes
+import com.group9.asaa.classes.transport.InMemoryTransportPorts
 import com.group9.asaa.transport.service.TransportStateMachine
-
 import kotlinx.coroutines.runBlocking
-import kotlin.time.Duration.Companion.seconds   // <-- make sure this import is present
+import kotlin.time.Duration.Companion.seconds
 
+/**
+ * Helper that builds a sample order using the *new* domain class.
+ */
 private fun sampleOrder(id: String) = AssemblyTransportOrder(
     orderId = id,
     components = listOf(Component("Bolt"), Component("Nut"), Component("Washer")),
@@ -14,7 +18,7 @@ private fun sampleOrder(id: String) = AssemblyTransportOrder(
 // ================================================
 //  TEST 1: ORDER TIMES OUT (confirmation)
 // ================================================
-public fun simulateTimeoutCase() = runBlocking {
+fun simulateTimeoutCase() = runBlocking {
     println("\n" + "=".repeat(60))
     println("SIMULATION 1 – ORDER TIMES OUT (confirmation)")
     println("=".repeat(60))
@@ -22,7 +26,7 @@ public fun simulateTimeoutCase() = runBlocking {
     val order = sampleOrder("ORD-TIMEOUT")
 
     val ports = InMemoryTransportPorts(
-        confirmationTimeout = 2.seconds,   // short → forces timeout
+        confirmationTimeout = 2.seconds,
         deliveryTimeout = 30.seconds,
         simulateConfirmationFailure = false,
         makeAgvsUnavailable = false
@@ -31,20 +35,18 @@ public fun simulateTimeoutCase() = runBlocking {
     val sm = TransportStateMachine(this, ports)
     sm.run(order)
 
-    kotlinx.coroutines.delay(12_000)  // wait to see timeout logs
-
+    kotlinx.coroutines.delay(12_000)   // wait long enough to see the timeout logs
     println("Final state: TIMED OUT (confirmation)")
 }
 
 // ================================================
 //  TEST 2: NO AGV AVAILABLE → DENIED
 // ================================================
-public fun simulateAgvUnavailableCase() = runBlocking {
+fun simulateAgvUnavailableCase() = runBlocking {
     println("\n" + "=".repeat(60))
     println("SIMULATION 2 – NO AGV AVAILABLE")
     println("=".repeat(60))
 
-    // Ensure ALL AGVs are UNAVAILABLE
     AGVPool.makeAllUnavailable()
     println("[Test] All AGVs set to UNAVAILABLE")
 
@@ -70,18 +72,17 @@ public fun simulateAgvUnavailableCase() = runBlocking {
 // ================================================
 //  TEST 3: AGV AVAILABLE → ACCEPTED & FULFILLED
 // ================================================
-public fun testAgvAvailablePath() = runBlocking {
+fun testAgvAvailablePath() = runBlocking {
     println("\n" + "=".repeat(60))
     println("TEST: AGV AVAILABLE → ORDER ACCEPTED & FULFILLED")
     println("=".repeat(60))
 
     // -------------------------------------------------
-    // 1. Guarantee that **at least one** AGV is AVAILABLE
+    // 1. Make sure at least one AGV is AVAILABLE
     // -------------------------------------------------
     val availableAgvs = AGVPool.checkAvailability()
     if (availableAgvs.isEmpty()) {
-        // No AGV is free → free the first one in the pool
-        val anyAgv = AGVPool.snapshot().first()          // safe – pool is never empty
+        val anyAgv = AGVPool.snapshot().first()   // pool is never empty
         AGVPool.release(anyAgv)
         println("[Test] Released ${anyAgv.id} to make it AVAILABLE")
     } else {
@@ -89,13 +90,13 @@ public fun testAgvAvailablePath() = runBlocking {
     }
 
     // -------------------------------------------------
-    // 2. Create order & ports (Duration values)
+    // 2. Build order & ports
     // -------------------------------------------------
     val order = sampleOrder("ORD-ACCEPTED")
 
     val ports = InMemoryTransportPorts(
         confirmationTimeout = 8.seconds,
-        deliveryTimeout     = 30.seconds,
+        deliveryTimeout = 30.seconds,
         simulateConfirmationFailure = false,
         makeAgvsUnavailable = false
     )
@@ -107,9 +108,9 @@ public fun testAgvAvailablePath() = runBlocking {
     sm.run(order)
 
     // -------------------------------------------------
-    // 4. Wait for all logs
+    // 4. Wait for logs
     // -------------------------------------------------
-    kotlinx.coroutines.delay(3_000)   // inside runBlocking you can call delay() directly
+    kotlinx.coroutines.delay(3_000)
 
     // -------------------------------------------------
     // 5. Print counters
