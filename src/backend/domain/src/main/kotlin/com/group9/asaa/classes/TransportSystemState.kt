@@ -1,4 +1,4 @@
-package com.group9.asaa.classes.transport
+package com.group9.asaa.classes
 
 enum class TransportSystemState {
     IDLE,

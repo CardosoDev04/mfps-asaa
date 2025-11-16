@@ -1,5 +1,6 @@
-package com.group9.asaa.transport.service
+package com.group9.asaa.transportation
 
+import com.group9.asaa.classes.TransportSystemState
 import com.group9.asaa.classes.transport.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -38,7 +39,7 @@ class TransportStateMachine(
     suspend fun run(order: AssemblyTransportOrder): TransportResult = coroutineScope {
         var current = ReceiverState.START
 
-        while (current != ReceiverState.DONE && coroutineContext.isActive) {
+        while (coroutineContext.isActive) {
             when (current) {
                 ReceiverState.START -> {
                     transition(TransportSystemState.CREATING_ORDER)
@@ -112,7 +113,9 @@ class TransportStateMachine(
                 ReceiverState.NOTIFYING_STATUS_FULFILLED -> {
                     return@coroutineScope finish(order, AssemblyTransportOrderStates.COMPLETED, TransportSystemState.ORDER_COMPLETED)
                 }
-                ReceiverState.DONE -> break
+                ReceiverState.DONE -> {
+                    break
+                }
             }
         }
         finish(order, AssemblyTransportOrderStates.DENIED, TransportSystemState.IDLE)

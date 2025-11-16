@@ -2,7 +2,7 @@ package com.group9.asaa.transport
 
 import com.group9.asaa.classes.transport.*               // <-- NEW: domain classes
 import com.group9.asaa.classes.transport.InMemoryTransportPorts
-import com.group9.asaa.transport.service.TransportStateMachine
+import com.group9.asaa.transportation.TransportStateMachine
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.seconds
 

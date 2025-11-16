@@ -1,7 +1,6 @@
 package com.group9.asaa.classes.transport
 
-import com.group9.asaa.classes.transport.AssemblyTransportOrder
-import com.group9.asaa.classes.transport.AssemblyTransportOrderStates
+import com.group9.asaa.classes.TransportSystemState
 
 data class TransportResult(
     val order: AssemblyTransportOrder,
