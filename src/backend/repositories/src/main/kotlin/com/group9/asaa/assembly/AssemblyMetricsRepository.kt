@@ -1,5 +1,7 @@
 package com.group9.asaa.assembly
 
+import com.group9.asaa.classes.assembly.AssemblyTransportOrder
+import com.group9.asaa.classes.assembly.AssemblyTransportOrderStates
 import org.jdbi.v3.core.Jdbi
 import org.springframework.stereotype.Repository
 import java.time.Instant
@@ -13,11 +15,24 @@ class JdbiAssemblyMetricsRepository(
         systemWriterJdbi.withHandle<Unit, Exception> { handle ->
             handle.createUpdate(
                 """
-                INSERT INTO assembly_order_metrics (order_id, sent_at, test_run_id)
-                VALUES (:orderId, :sentAt, :testRunId)
+                INSERT INTO orders (
+                    order_id,
+                    delivery_location,
+                    state,
+                    sent_at,
+                    test_run_id
+                )
+                VALUES (
+                    :orderId,
+                    'UNKNOWN',       
+                    'PENDING',      
+                    :sentAt,
+                    :testRunId
+                )
                 ON CONFLICT (order_id) DO UPDATE
-                SET sent_at = EXCLUDED.sent_at,
-                    test_run_id = COALESCE(assembly_order_metrics.test_run_id, EXCLUDED.test_run_id);
+                SET sent_at    = EXCLUDED.sent_at,
+                    test_run_id = COALESCE(orders.test_run_id, EXCLUDED.test_run_id),
+                    updated_at  = now();
                 """
             )
                 .bind("orderId", orderId)
@@ -35,11 +50,11 @@ class JdbiAssemblyMetricsRepository(
         systemWriterJdbi.withHandle<Unit, Exception> { handle ->
             handle.createUpdate(
                 """
-                INSERT INTO assembly_order_metrics (order_id, confirmation_at, confirmation_latency_ms)
-                VALUES (:orderId, :confirmationAt, :latency)
-                ON CONFLICT (order_id) DO UPDATE
-                SET confirmation_at         = EXCLUDED.confirmation_at,
-                    confirmation_latency_ms = EXCLUDED.confirmation_latency_ms;
+                UPDATE orders
+                SET confirmation_at         = :confirmationAt,
+                    confirmation_latency_ms = :latency,
+                    updated_at              = now()
+                WHERE order_id = :orderId;
                 """
             )
                 .bind("orderId", orderId)
@@ -53,14 +68,16 @@ class JdbiAssemblyMetricsRepository(
         systemWriterJdbi.withHandle<Unit, Exception> { handle ->
             handle.createUpdate(
                 """
-                INSERT INTO assembly_order_metrics (order_id, accepted_at)
-                VALUES (:orderId, :acceptedAt)
-                ON CONFLICT (order_id) DO UPDATE
-                SET accepted_at = EXCLUDED.accepted_at;
+                UPDATE orders
+                SET accepted_at = :acceptedAt,
+                    state       = :state,
+                    updated_at  = now()
+                WHERE order_id = :orderId;
                 """
             )
                 .bind("orderId", orderId)
                 .bind("acceptedAt", acceptedAt)
+                .bind("state", AssemblyTransportOrderStates.ACCEPTED.name)
                 .execute()
         }
     }
@@ -73,23 +90,42 @@ class JdbiAssemblyMetricsRepository(
         systemWriterJdbi.withHandle<Unit, Exception> { handle ->
             handle.createUpdate(
                 """
-            INSERT INTO assembly_order_metrics (
-                order_id,
-                assembling_started_at,
-                accepted_to_assembling_ms
-            )
-            VALUES (:orderId, :assemblingStartedAt, :durationMs)
-            ON CONFLICT (order_id) DO UPDATE
-            SET assembling_started_at      = EXCLUDED.assembling_started_at,
-                accepted_to_assembling_ms  = EXCLUDED.accepted_to_assembling_ms;
-            """
+                UPDATE orders
+                SET assembling_started_at     = :assemblingStartedAt,
+                    accepted_to_assembling_ms = :durationMs,
+                    state                     = :state,
+                    updated_at                = now()
+                WHERE order_id = :orderId;
+                """
             )
                 .bind("orderId", orderId)
                 .bind("assemblingStartedAt", assemblingStartedAt)
-                .bind("durationMs", acceptedToAssemblingMs)   // ✅ FIXED
+                .bind("durationMs", acceptedToAssemblingMs)
+                .bind("state", AssemblyTransportOrderStates.IN_PROGRESS.name)
                 .execute()
         }
     }
 
+    override fun insertOrderWithState(order: AssemblyTransportOrder, state: AssemblyTransportOrderStates) {
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            handle.createUpdate(
+                """
+                INSERT INTO orders (
+                    order_id,
+                    delivery_location,
+                    state
+                )
+                VALUES (:orderId, :deliveryLocation, :state)
+                ON CONFLICT (order_id) DO UPDATE
+                SET delivery_location = EXCLUDED.delivery_location,
+                    state             = EXCLUDED.state,
+                    updated_at        = now();
+                """
+            )
+                .bind("orderId", order.orderId)
+                .bind("deliveryLocation", order.deliveryLocation.name)
+                .bind("state", state.name)
+                .execute()
+        }
+    }
 }
-

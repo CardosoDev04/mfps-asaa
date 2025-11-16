@@ -7,5 +7,6 @@ data class AssemblyOrderMetrics(
     val confirmationLatencyMs: Long? = null,
     val acceptedAt: java.time.Instant? = null,
     val assemblingStartedAt: java.time.Instant? = null,
-    val acceptedToAssemblingMs: Long? = null
+    val acceptedToAssemblingMs: Long? = null,
+    val testRunId: String? = null
 )

@@ -213,6 +213,9 @@ class AssemblyService(
                     )
                 }
             },
+            insertOrderWithState = { order, state ->
+                metricsRepo.insertOrderWithState(order, state)
+            }
         )
 
         val orderScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
