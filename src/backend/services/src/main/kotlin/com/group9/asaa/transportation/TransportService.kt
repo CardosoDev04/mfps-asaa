@@ -9,8 +9,9 @@ import com.group9.asaa.communication.service.kafka.ReceiveStage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Service
@@ -18,10 +19,12 @@ import org.springframework.stereotype.Service
 @Service
 class TransportService(
     private val mapper: ObjectMapper,
-    private val receiveStage: ReceiveStage
+    private val receiveStage: ReceiveStage,
+    private val events: TransportEventBus
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val concurrency = Semaphore(2)
 
     /**
      * Listen to outbound messages and react to TRANSPORT_ORDERs that
@@ -35,11 +38,8 @@ class TransportService(
         try {
             val msg = mapper.readValue(json, CommunicationMessage::class.java)
 
-            // We only care about:
-            // - messages for the transport subsystem
-            // - that have reached SENT (delivered by comms pipeline)
-            // - and represent a TRANSPORT_ORDER
-            if (msg.toSubsystem != "transport" ||
+            if (
+                msg.toSubsystem != "transport" ||
                 msg.state != CommunicationState.SENT ||
                 msg.type.uppercase() != "TRANSPORT_ORDER"
             ) {
@@ -48,48 +48,34 @@ class TransportService(
 
             val order = mapper.readValue(msg.payload, AssemblyTransportOrder::class.java)
             val orderId = order.orderId
-            log.info("Transport service RECEIVED transport order orderId={} payload={}", orderId, msg.payload)
+            log.info(
+                "TransportService RECEIVED transport order orderId={} payload={} correlationId={}",
+                orderId,
+                msg.payload,
+                msg.correlationId
+            )
 
-            // Simulate async handling: confirm, then later signal arrival
             scope.launch {
-                // 1) Confirm order quickly
-                receiveStage.accept(
-                    fromSubsystem = "transport",
-                    toSubsystem = "assembly",
-                    type = "ORDER_CONFIRMED",
-                    payload = """
-                        {
-                          "orderId": "$orderId",
-                          "accepted": true
-                        }
-                    """.trimIndent(),
-                    correlationId = orderId
-                )
-                log.info("Transport service SENT ORDER_CONFIRMED for orderId={}", orderId)
+                concurrency.withPermit {
+                    val ports = KafkaTransportPorts(
+                        orderId = orderId,
+                        correlationId = msg.correlationId,
+                        receiveStage = receiveStage,
+                        events = events
+                    )
+                    val sm = TransportStateMachine(this, ports, events)
 
-                // 2) After a small delay, signal that the transport has arrived
-                val randomDelay = (10..15).random() * 1000L
-                delay(randomDelay)
-
-                receiveStage.accept(
-                    fromSubsystem = "transport",
-                    toSubsystem = "assembly",
-                    type = "TRANSPORT_ARRIVED",
-                    payload = """
-                        {
-                          "orderId": "$orderId"
-                        }
-                    """.trimIndent(),
-                    correlationId = orderId
-                )
-                log.info("Transport service SENT TRANSPORT_ARRIVED for orderId={}", orderId)
-
-                // If later you want transport to also decide about validation,
-                // you can add a third message type: ASSEMBLY_VALIDATED
-                // and handle it in AssemblyCommunicationAdapter.
+                    val result = sm.run(order)
+                    log.info(
+                        "TransportService COMPLETED orderId={} finalSystemState={} reportedOrderState={}",
+                        orderId,
+                        result.finalSystemState,
+                        result.reportedOrderState
+                    )
+                }
             }
         } catch (e: Exception) {
-            log.error("Transport service failed to handle outbound message: {}", e.message)
+            log.error("TransportService failed to handle outbound message: {}", e.message, e)
         }
     }
 }
