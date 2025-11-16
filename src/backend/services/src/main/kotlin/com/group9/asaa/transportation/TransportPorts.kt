@@ -3,12 +3,6 @@ package com.group9.asaa.transport
 import kotlinx.coroutines.delay
 import kotlin.time.Duration
 
-// File 3: TransportPorts.kt (UPDATED)
-
-
-// ================================
-// I/O layer – injected into the state machine
-// ================================
 interface TransportPorts {
     suspend fun sendOrder(order: AssemblyTransportOrder)
     suspend fun awaitConfirmation(): Boolean?               // true=accepted, false=denied, null=timeout

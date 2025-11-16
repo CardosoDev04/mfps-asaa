@@ -1,4 +1,3 @@
-// File 2: AGV.kt (UPDATED)
 package com.group9.asaa.transport
 
 // ================================

@@ -3,11 +3,6 @@ package com.group9.asaa.transport
 // ================================
 // Domain Classes
 // ================================
-// File 1: Domain.kt (UPDATED)
-
-// ================================
-// Domain Classes
-// ================================
 data class Component(val name: String)
 
 data class AssemblyTransportOrder(

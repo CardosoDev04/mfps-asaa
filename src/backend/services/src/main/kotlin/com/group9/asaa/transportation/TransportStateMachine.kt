@@ -1,88 +1,20 @@
 package com.group9.asaa.transport.service
 
 import com.group9.asaa.classes.transport.*
-import com.group9.asaa.misc.LocationsTransport
-import com.group9.asaa.transport.AGVState
 import com.group9.asaa.transport.AssemblyTransportOrder
 import com.group9.asaa.transport.AssemblyTransportOrderStates
 import com.group9.asaa.transport.TransportPorts
-//import com.group9.asaa.transport.agvPool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeoutOrNull
-//import kotlin.time.Duration
-//import kotlin.time.Duration.Companion.seconds
-
-// TransportStateMachine.kt
-
-// ================================
-//  AGV + Supporting Structures
-// ================================
-
-import kotlin.concurrent.timer
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-
-// ================================
-// Constants & safe_inc
-// ================================
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-
-// ================================
-// Pure state-transition engine
-// ================================
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.time.Duration.Companion.seconds
-
-// File 4: TransportStateMachine.kt (UPDATED)
-
 import com.group9.asaa.transport.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlin.time.Duration.Companion.seconds
 
-import com.group9.asaa.transport.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlin.time.Duration.Companion.seconds
-
-// ---------------------------------------------------------------------
-//  Existing enum + NEW states for the “AGV-available → accept → fulfil” path
-// ---------------------------------------------------------------------
-
-import com.group9.asaa.transport.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlin.time.Duration.Companion.seconds
-
-// ========================================================
-//  NEW STATE MACHINE – EXACTLY AS PER YOUR INSTRUCTIONS
-// ========================================================
-
-
-import com.group9.asaa.transport.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlin.time.Duration.Companion.seconds
-
-// ---------------------------------------------------------------------
-//  ORIGINAL PUBLIC API – kept for TransportService compatibility
-// ---------------------------------------------------------------------
-
-import com.group9.asaa.transport.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlin.time.Duration.Companion.seconds
-
-// ---------------------------------------------------------------------
-//  PUBLIC API – compatible with TransportService
-// ---------------------------------------------------------------------
 enum class TransportSystemState {
     IDLE,
     CREATING_ORDER, ORDER_CREATED, SENDING_ORDER,
