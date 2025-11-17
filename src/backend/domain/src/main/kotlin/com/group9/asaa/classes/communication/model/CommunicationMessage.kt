@@ -1,7 +1,5 @@
 package com.group9.asaa.classes.communication.model
 
-import java.time.Instant
-
 /**
  * Canonical message representation that flows through the communication pipeline.
  * All Kafka topics carry JSON-serialized instances keyed by messageId.
@@ -18,35 +16,3 @@ data class CommunicationMessage(
     val attempts: Int = 0,
     val lastError: String? = null
 )
-
-
-/**
- * Observability event envelope produced to notifications topic and fanned out via SSE.
- * eventType: one of "state", "status", "log" for frontend filtering.
- */
-data class EventEnvelope(
-    val id: String,            // messageId or composite if needed
-    val eventType: String,     // state | status | log
-    val timestamp: Instant = Instant.now(),
-    val messageId: String,
-    val correlationId: String?,
-    val data: Map<String, Any?>
-)
-
-/**
- * Business status milestones (subset). Extend as needed.
- */
-enum class StatusMilestone { RECEIVED, CONNECTED, SENDING, SENT, NOTIFIED, FAILED }
-
-/**
- * Terminal failure reasons could be expanded.
- */
-sealed class FailureReason(val reason: String) {
-    data object EnrichmentFailed: FailureReason("enrichment_failed")
-}
-
-/**
- * Communication pipeline states.
- */
-enum class CommunicationState { RECEIVED, CONNECTED, SENDING, SENT, NOTIFIED, FAILED }
-
