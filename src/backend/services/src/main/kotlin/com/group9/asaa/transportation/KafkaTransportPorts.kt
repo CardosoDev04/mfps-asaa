@@ -3,6 +3,7 @@ package com.group9.asaa.transportation
 import com.group9.asaa.classes.assembly.AssemblyTransportOrderStates
 import com.group9.asaa.classes.transport.AGV
 import com.group9.asaa.classes.transport.AGVPool
+import com.group9.asaa.classes.transport.TransportEvent
 import com.group9.asaa.classes.transport.TransportPorts
 import com.group9.asaa.communication.service.kafka.ReceiveStage
 import kotlinx.coroutines.delay
@@ -32,7 +33,7 @@ class KafkaTransportPorts(
         )
     }
 
-    override suspend fun awaitConfirmation(): Boolean? {
+    override suspend fun awaitConfirmation(): Boolean {
         // purely internal simulation: we don't ask assembly here
         delay(confirmationDelay.inWholeMilliseconds)
         return true // always confirm for now; could be configurable

@@ -6,18 +6,7 @@ import com.group9.asaa.classes.transport.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
-private enum class ReceiverState {
-    START, RECEIVING_ORDER, RECEIVED_ORDER, TIMED_OUT,
-    CHECKING_AVAILABILITY, SENDING_CONFIRMATION,
-    DENYING_ORDER, ACCEPTING_ORDER, ORDER_ACCEPTED,
-    FULFILLING_ORDER, NOTIFYING_STATUS_FULFILLING_ORDER,
-    ORDER_FULFILLED, NOTIFYING_STATUS_FULFILLED,
-    SENT_CONFIRMATION, NOTIFYING_NOT_AVAILABLE,
-    NOTIFYING_STATUS_NOT_AVAILABLE, DONE
-}
-
 class TransportStateMachine(
-    private val scope: CoroutineScope,
     private val ports: TransportPorts,
     private val events: TransportEventBus? = null
 ) {
@@ -169,16 +158,5 @@ class TransportStateMachine(
 
         log("Finished order ${order.orderId} → $reported (system=$final)")
         return TransportResult(order, _state.value, reported)
-    }
-
-    companion object {
-        private val globalDenied = IntArray(1) { 0 }
-        private val globalProcessed = IntArray(1) { 0 }
-
-        internal fun incDenied() = if (globalDenied[0] < 10) globalDenied[0]++ else Unit
-        internal fun incProcessed() = if (globalProcessed[0] < 10) globalProcessed[0]++ else Unit
-
-        fun deniedCount() = globalDenied[0]
-        fun processedCount() = globalProcessed[0]
     }
 }

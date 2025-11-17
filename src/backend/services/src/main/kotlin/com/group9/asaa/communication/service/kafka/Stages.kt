@@ -1,9 +1,8 @@
 package com.group9.asaa.communication.service.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.CommunicationState
-import com.group9.asaa.classes.communication.model.FailureReason
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.FailureReason
 import com.group9.asaa.communication.service.CommunicationStateMachine
 import com.group9.asaa.communication.service.outbox.DuplicationGate
 import com.group9.asaa.communication.service.outbox.OutboxRecord
@@ -44,7 +43,6 @@ class ReceiveStage(
                     mapper.writeValueAsString(e)
                 )
             }
-            Unit
         }
 
         log.info(
@@ -85,7 +83,6 @@ class ConnectStage(
                             mapper.writeValueAsString(e)
                         )
                     }
-                    Unit
                 }
                 log.info("{} CONNECTED", message.messageId)
             } catch (e: Exception) {
@@ -103,7 +100,6 @@ class ConnectStage(
                             mapper.writeValueAsString(ev)
                         )
                     }
-                    Unit
                 }
                 log.error("{} FAILED connect {}", message.messageId, e.message)
             }

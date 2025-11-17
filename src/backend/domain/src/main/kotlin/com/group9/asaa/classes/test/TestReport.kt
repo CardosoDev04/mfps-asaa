@@ -3,18 +3,6 @@ package com.group9.asaa.classes.test
 import com.group9.asaa.classes.assembly.AssemblyOrderMetrics
 import java.time.Instant
 
-/**
- * data class AssemblyOrderMetrics(
- *     val orderId: String,
- *     val sentAt: java.time.Instant? = null,
- *     val confirmationAt: java.time.Instant? = null,
- *     val confirmationLatencyMs: Long? = null,
- *     val acceptedAt: java.time.Instant? = null,
- *     val assemblingStartedAt: java.time.Instant? = null,
- *     val acceptedToAssemblingMs: Long? = null
- * )
- */
-
 data class TestReport(
     val id: String,
     val date: Instant,

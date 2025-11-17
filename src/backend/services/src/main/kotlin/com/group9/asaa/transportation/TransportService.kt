@@ -2,8 +2,8 @@ package com.group9.asaa.transportation
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.CommunicationState
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.CommunicationState
 import com.group9.asaa.communication.service.kafka.KafkaConfiguration
 import com.group9.asaa.communication.service.kafka.ReceiveStage
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +24,7 @@ class TransportService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val concurrency = Semaphore(2)
+    private val concurrency = Semaphore(3)
 
     /**
      * Listen to outbound messages and react to TRANSPORT_ORDERs that
@@ -63,7 +63,7 @@ class TransportService(
                         receiveStage = receiveStage,
                         events = events
                     )
-                    val sm = TransportStateMachine(this, ports, events)
+                    val sm = TransportStateMachine(ports, events)
 
                     val result = sm.run(order)
                     log.info(

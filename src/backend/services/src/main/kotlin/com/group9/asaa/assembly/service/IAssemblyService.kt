@@ -3,6 +3,7 @@ package com.group9.asaa.assembly.service
 import com.group9.asaa.classes.assembly.AssemblySystemStates
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
 import com.group9.asaa.classes.assembly.Blueprint
+import com.group9.asaa.misc.Locations
 import kotlinx.coroutines.flow.StateFlow
 
 interface IAssemblyService {

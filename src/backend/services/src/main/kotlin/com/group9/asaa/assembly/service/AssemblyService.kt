@@ -2,11 +2,9 @@ package com.group9.asaa.assembly.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.group9.asaa.assembly.IAssemblyMetricsRepository
-import com.group9.asaa.classes.assembly.AssemblyEvent
-import com.group9.asaa.classes.assembly.AssemblySystemStates
-import com.group9.asaa.classes.assembly.AssemblyTransportOrder
-import com.group9.asaa.classes.assembly.Blueprint
+import com.group9.asaa.classes.assembly.*
 import com.group9.asaa.communication.service.kafka.ReceiveStage
+import com.group9.asaa.misc.Locations
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -16,6 +14,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
 
 @Service
@@ -38,18 +37,56 @@ class AssemblyService(
 
     private val confirmations = ConcurrentHashMap<String, MutableStateFlow<Boolean?>>()
     private val arrivals = ConcurrentHashMap<String, MutableStateFlow<Boolean>>()
-    private val validations = ConcurrentHashMap<String, MutableStateFlow<ValidationOutcome?>>()
+    private val validations = ConcurrentHashMap<String, MutableStateFlow<AssemblyValidationOutcome?>>()
 
     private val orderStates = ConcurrentHashMap<String, MutableStateFlow<AssemblySystemStates>>()
 
-    private val assemblyGate = Semaphore(1)
+    private val assemblyLines = listOf(
+        Locations.ASSEMBLY_LINE_A,
+        Locations.ASSEMBLY_LINE_B,
+        Locations.ASSEMBLY_LINE_C
+    )
+
+    private val lineBusy = ConcurrentHashMap<Locations, MutableStateFlow<Boolean>>()
+    private fun markLineBusy(line: Locations, busy: Boolean) {
+        lineBusy.computeIfAbsent(line) { MutableStateFlow(false) }.value = busy
+    }
+
+    private fun pickDeliveryLocation(): Locations {
+        assemblyLines.forEach { line ->
+            pendingPerLine.computeIfAbsent(line) { AtomicInteger(0) }
+        }
+
+        // Pick the line with the fewest pending orders
+        return pendingPerLine.entries.minByOrNull { it.value.get() }?.key
+            ?: assemblyLines.random()
+    }
+
+    private val pendingPerLine = ConcurrentHashMap<Locations, AtomicInteger>()
+
+    private fun incPending(line: Locations) {
+        pendingPerLine.computeIfAbsent(line) { AtomicInteger(0) }
+            .incrementAndGet()
+    }
+
+    private fun decPending(line: Locations) {
+        pendingPerLine[line]?.decrementAndGet()
+    }
+
+    private val assemblyGates = ConcurrentHashMap<Locations, Semaphore>()
+    private val activeAssemblies = AtomicInteger(0)
+
+    private fun gateFor(location: Locations): Semaphore =
+        assemblyGates.computeIfAbsent(location) { Semaphore(1) }
+
     private val _overallSystemState = MutableStateFlow(AssemblySystemStates.IDLE)
 
     private data class Enqueued(
         val blueprint: Blueprint,
         val demo: Boolean,
         val reply: CompletableDeferred<AssemblyTransportOrder>,
-        val testRunId: String? = null
+        val testRunId: String? = null,
+        val deliveryLocation: Locations = Locations.ASSEMBLY_LINE_A
     )
 
     private val queue = Channel<Enqueued>(capacity = 100)
@@ -66,7 +103,7 @@ class AssemblyService(
         scope.launch {
             for (req in queue) {
                 try {
-                    val created = runOne(req.blueprint, req.demo, req.testRunId)
+                    val created = runOne(req.blueprint, req.demo, req.testRunId, req.deliveryLocation)
                     req.reply.complete(created)
                 } catch (t: Throwable) {
                     req.reply.completeExceptionally(t)
@@ -77,52 +114,77 @@ class AssemblyService(
         }
     }
 
-    override suspend fun createOrder(orderBlueprint: Blueprint, demo: Boolean, testRunId: String?): AssemblyTransportOrder {
+    override suspend fun createOrder(
+        orderBlueprint: Blueprint,
+        demo: Boolean,
+        testRunId: String?
+    ): AssemblyTransportOrder {
         val reply = CompletableDeferred<AssemblyTransportOrder>()
-        val offered = queue.trySend(Enqueued(orderBlueprint, demo, reply, testRunId))
-        if (offered.isFailure) throw IllegalStateException("Order queue is full (100). Try again later.")
+
+        val chosenLocation = pickDeliveryLocation()
+        incPending(chosenLocation)
+
+        log.info("Routing new order to $chosenLocation")
+
+        val offered = queue.trySend(
+            Enqueued(
+                blueprint = orderBlueprint,
+                demo = demo,
+                reply = reply,
+                testRunId = testRunId,
+                deliveryLocation = chosenLocation
+            )
+        )
+
+        if (offered.isFailure) {
+            throw IllegalStateException("Order queue is full (100). Try again later.")
+        }
+
         _queueSize.update { it + 1 }
         return reply.await()
     }
 
-    private suspend fun runOne(orderBlueprint: Blueprint, demo: Boolean, testRunId: String?): AssemblyTransportOrder {
+    private suspend fun runOne(orderBlueprint: Blueprint, demo: Boolean, testRunId: String?, deliveryLocation: Locations): AssemblyTransportOrder {
         val orderId = "order-${UUID.randomUUID()}"
         val myState = orderStates.computeIfAbsent(orderId) { MutableStateFlow(AssemblySystemStates.IDLE) }
 
+        val order = AssemblyTransportOrder(
+            orderId = orderId,
+            components = orderBlueprint.components,
+            deliveryLocation = deliveryLocation
+        )
+
+        val lineGate = gateFor(order.deliveryLocation)
+
         val confirmationFlow = MutableStateFlow<Boolean?>(null)
         val transportArrivedFlow = MutableStateFlow(false)
-        val validationFlow = MutableStateFlow<ValidationOutcome?>(null)
+        val validationFlow = MutableStateFlow<AssemblyValidationOutcome?>(null)
         val orderCreated = CompletableDeferred<AssemblyTransportOrder>()
 
         val ports = AssemblyPorts(
-            sendOrder = { order ->
-                // Final domain order (ensure consistent orderId)
-                val final = order.copy(orderId = orderId)
+            sendOrder = { _ ->
 
-                // 🔹 register flows so external replies can drive this order
                 confirmations[orderId] = confirmationFlow
                 arrivals[orderId] = transportArrivedFlow
                 validations[orderId] = validationFlow
 
-                // 🔹 send to communication system as a TRANSPORT_ORDER to transport subsystem
-                val payloadJson = mapper.writeValueAsString(final)
+                val payloadJson = mapper.writeValueAsString(order)
 
                 receiveStage.accept(
                     fromSubsystem = "assembly",
                     toSubsystem = "transport",
                     type = "TRANSPORT_ORDER",
                     payload = payloadJson,
-                    correlationId = orderId      // this ties replies back to this assembly order
+                    correlationId = orderId
                 )
 
-                // 🔹 complete the "order created" future for the API caller
-                orderCreated.complete(final)
+                orderCreated.complete(order)
             },
             awaitOrderConfirmation = { confirmationFlow.filterNotNull().first() },
             awaitTransportArrival = { transportArrivedFlow.filter { it }.first() },
             performAssemblyAndValidate = {
                 delay((10..20).random() * 1_000L)
-                ValidationOutcome.VALID
+                AssemblyValidationOutcome.VALID
             },
             notifyStatus = { state ->
                 _events.tryEmit(
@@ -130,13 +192,26 @@ class AssemblyService(
                 )
             },
             acquireAssemblyPermit = {
-                assemblyGate.acquire()
-                _overallSystemState.value = AssemblySystemStates.ASSEMBLING
+                lineGate.acquire()
+                // mark this line as busy
+                markLineBusy(order.deliveryLocation, true)
+
+                val now = activeAssemblies.incrementAndGet()
+                if (now > 0) {
+                    _overallSystemState.value = AssemblySystemStates.ASSEMBLING
+                }
             },
             releaseAssemblyPermit = {
-                assemblyGate.release()
-                _overallSystemState.value = AssemblySystemStates.IDLE
+                lineGate.release()
+                // mark this line as free again
+                markLineBusy(order.deliveryLocation, false)
+
+                val now = activeAssemblies.decrementAndGet()
+                if (now <= 0) {
+                    _overallSystemState.value = AssemblySystemStates.IDLE
+                }
             },
+
             log = { msg ->
                 _events.tryEmit(
                     AssemblyEvent(kind = "log", message = msg, orderId = orderId)
@@ -213,7 +288,7 @@ class AssemblyService(
                     )
                 }
             },
-            insertOrderWithState = { order, state ->
+            insertOrderWithState = { state ->
                 metricsRepo.insertOrderWithState(order, state)
             }
         )
@@ -237,11 +312,10 @@ class AssemblyService(
                 delay(20_000)
                 transportArrivedFlow.value = true
                 delay((10..20).random() * 1_000L)
-                validationFlow.value = ValidationOutcome.VALID
+                validationFlow.value = AssemblyValidationOutcome.VALID
             }
         } else null
 
-        // 🔹 1) Start the collector and signal when it has subscribed
         val stateCollectorReady = CompletableDeferred<Unit>()
         orderScope.launch {
             machine.state
@@ -258,12 +332,10 @@ class AssemblyService(
                 }
         }
 
-        // 🔹 2) Wait until the collector is definitely listening
         stateCollectorReady.await()
 
-        // 🔹 3) Only now run the state machine — no early states can be missed
         val machineJob = orderScope.launch {
-            machine.run(orderBlueprint, orderId = orderId)
+            machine.run(order)
         }
 
         machineJob.invokeOnCompletion { t ->
@@ -295,6 +367,7 @@ class AssemblyService(
             arrivals.remove(orderId)
             validations.remove(orderId)
 
+            decPending(order.deliveryLocation)
             orderScope.cancel()
         }
 
@@ -310,7 +383,7 @@ class AssemblyService(
     }
 
     override fun validateAssembly(orderId: String, valid: Boolean) {
-        validations[orderId]?.let { it.value = if (valid) ValidationOutcome.VALID else ValidationOutcome.INVALID }
+        validations[orderId]?.let { it.value = if (valid) AssemblyValidationOutcome.VALID else AssemblyValidationOutcome.INVALID }
     }
 
     override fun demoAutopilot(

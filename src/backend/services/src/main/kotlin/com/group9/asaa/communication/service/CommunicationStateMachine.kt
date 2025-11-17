@@ -1,10 +1,10 @@
 package com.group9.asaa.communication.service
 
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.CommunicationState
-import com.group9.asaa.classes.communication.model.EventEnvelope
-import com.group9.asaa.classes.communication.model.FailureReason
-import com.group9.asaa.classes.communication.model.StatusMilestone
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.CommunicationState
+import com.group9.asaa.classes.communication.EventEnvelope
+import com.group9.asaa.classes.communication.FailureReason
+import com.group9.asaa.classes.communication.StatusMilestone
 import java.time.Instant
 import java.util.UUID
 
