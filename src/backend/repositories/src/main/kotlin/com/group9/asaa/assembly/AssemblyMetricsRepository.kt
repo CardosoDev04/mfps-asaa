@@ -128,4 +128,150 @@ class JdbiAssemblyMetricsRepository(
                 .execute()
         }
     }
+
+    override fun markTransportFulfilled(orderId: String, fulfilledAt: Instant, transportLatencyMs: Long) {
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            handle.createUpdate(
+                """
+            UPDATE orders
+            SET transport_fulfilled_at = :fulfilledAt,
+                transport_latency_ms   = :latency,
+                updated_at             = now()
+            WHERE order_id = :orderId;
+            """
+            )
+                .bind("orderId", orderId)
+                .bind("fulfilledAt", fulfilledAt)
+                .bind("latency", transportLatencyMs)
+                .execute()
+        }
+    }
+
+    override fun markOrderFinalized(
+        orderId: String,
+        completedAt: Instant,
+        totalLeadTimeMs: Long,
+        finalSystemState: String,
+        finalOrderState: String
+    ) {
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            handle.createUpdate(
+                """
+                UPDATE orders
+                SET completed_at        = :completedAt,
+                    total_lead_time_ms  = :totalLeadTimeMs,
+                    final_system_state  = :finalSystemState,
+                    final_order_state   = :finalOrderState,
+                    updated_at          = now()
+                WHERE order_id = :orderId;
+                """
+            )
+                .bind("orderId", orderId)
+                .bind("completedAt", completedAt)
+                .bind("totalLeadTimeMs", totalLeadTimeMs)
+                .bind("finalSystemState", finalSystemState)
+                .bind("finalOrderState", finalOrderState)
+                .execute()
+        }
+    }
+
+    override fun recordStateTransition(
+        orderId: String,
+        subsystem: String,
+        fromState: String?,
+        toState: String,
+        at: Instant
+    ) {
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            // 1) insert into state_transitions
+            handle.createUpdate(
+                """
+                INSERT INTO state_transitions (
+                    order_id,
+                    subsystem,
+                    from_state,
+                    to_state,
+                    ts
+                )
+                VALUES (:orderId, :subsystem, :fromState, :toState, :ts);
+                """
+            )
+                .bind("orderId", orderId)
+                .bind("subsystem", subsystem)
+                .bind("fromState", fromState)
+                .bind("toState", toState)
+                .bind("ts", at)
+                .execute()
+        }
+
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            // 2) keep current system_state on orders in sync
+            handle.createUpdate(
+                """
+                UPDATE orders
+                SET system_state = :toState,
+                    updated_at   = now()
+                WHERE order_id = :orderId;
+                """
+            )
+                .bind("orderId", orderId)
+                .bind("toState", toState)
+                .execute()
+        }
+    }
+
+    override fun recordQueueEvent(
+        orderId: String,
+        line: String,
+        eventType: String,
+        queueSize: Int,
+        pendingOnLine: Int,
+        at: Instant
+    ) {
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            handle.createUpdate(
+                """
+                INSERT INTO queue_events (
+                    order_id,
+                    line,
+                    event_type,
+                    queue_size,
+                    pending_on_line,
+                    ts
+                )
+                VALUES (
+                    :orderId,
+                    :line,
+                    :eventType,
+                    :queueSize,
+                    :pendingOnLine,
+                    :ts
+                );
+                """
+            )
+                .bind("orderId", orderId)
+                .bind("line", line)
+                .bind("eventType", eventType)
+                .bind("queueSize", queueSize)
+                .bind("pendingOnLine", pendingOnLine)
+                .bind("ts", at)
+                .execute()
+        }
+    }
+
+    override fun markAssemblyCompleted(orderId: String, completedAt: Instant, assemblyDurationMs: Long) {
+        systemWriterJdbi.withHandle<Unit, Exception> { handle ->
+            handle.createUpdate(
+                """
+                UPDATE orders
+                SET assembly_duration_ms = :duration,
+                    updated_at           = now()
+                WHERE order_id = :orderId;
+                """
+            )
+                .bind("orderId", orderId)
+                .bind("duration", assemblyDurationMs)
+                .execute()
+        }
+    }
 }
