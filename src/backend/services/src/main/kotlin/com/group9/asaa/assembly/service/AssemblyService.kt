@@ -2,10 +2,7 @@ package com.group9.asaa.assembly.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.group9.asaa.assembly.IAssemblyMetricsRepository
-import com.group9.asaa.classes.assembly.AssemblyEvent
-import com.group9.asaa.classes.assembly.AssemblySystemStates
-import com.group9.asaa.classes.assembly.AssemblyTransportOrder
-import com.group9.asaa.classes.assembly.Blueprint
+import com.group9.asaa.classes.assembly.*
 import com.group9.asaa.communication.service.kafka.ReceiveStage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
@@ -38,7 +35,7 @@ class AssemblyService(
 
     private val confirmations = ConcurrentHashMap<String, MutableStateFlow<Boolean?>>()
     private val arrivals = ConcurrentHashMap<String, MutableStateFlow<Boolean>>()
-    private val validations = ConcurrentHashMap<String, MutableStateFlow<ValidationOutcome?>>()
+    private val validations = ConcurrentHashMap<String, MutableStateFlow<AssemblyValidationOutcome?>>()
 
     private val orderStates = ConcurrentHashMap<String, MutableStateFlow<AssemblySystemStates>>()
 
@@ -91,7 +88,7 @@ class AssemblyService(
 
         val confirmationFlow = MutableStateFlow<Boolean?>(null)
         val transportArrivedFlow = MutableStateFlow(false)
-        val validationFlow = MutableStateFlow<ValidationOutcome?>(null)
+        val validationFlow = MutableStateFlow<AssemblyValidationOutcome?>(null)
         val orderCreated = CompletableDeferred<AssemblyTransportOrder>()
 
         val ports = AssemblyPorts(
@@ -122,7 +119,7 @@ class AssemblyService(
             awaitTransportArrival = { transportArrivedFlow.filter { it }.first() },
             performAssemblyAndValidate = {
                 delay((10..20).random() * 1_000L)
-                ValidationOutcome.VALID
+                AssemblyValidationOutcome.VALID
             },
             notifyStatus = { state ->
                 _events.tryEmit(
@@ -237,7 +234,7 @@ class AssemblyService(
                 delay(20_000)
                 transportArrivedFlow.value = true
                 delay((10..20).random() * 1_000L)
-                validationFlow.value = ValidationOutcome.VALID
+                validationFlow.value = AssemblyValidationOutcome.VALID
             }
         } else null
 
@@ -310,7 +307,7 @@ class AssemblyService(
     }
 
     override fun validateAssembly(orderId: String, valid: Boolean) {
-        validations[orderId]?.let { it.value = if (valid) ValidationOutcome.VALID else ValidationOutcome.INVALID }
+        validations[orderId]?.let { it.value = if (valid) AssemblyValidationOutcome.VALID else AssemblyValidationOutcome.INVALID }
     }
 
     override fun demoAutopilot(

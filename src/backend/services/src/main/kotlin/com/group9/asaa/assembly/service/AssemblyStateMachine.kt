@@ -7,46 +7,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
+import com.group9.asaa.classes.assembly.AssemblyValidationOutcome
 
-data class AssemblyPorts(
-    val sendOrder: suspend (order: AssemblyTransportOrder) -> Unit,
-    val awaitOrderConfirmation: suspend () -> Boolean?,
-    val awaitTransportArrival: suspend () -> Boolean,
-    val performAssemblyAndValidate: suspend () -> ValidationOutcome?,
-    val notifyStatus: suspend (state: AssemblyTransportOrderStates) -> Unit,
-    val acquireAssemblyPermit: suspend () -> Unit,
-    val releaseAssemblyPermit: suspend () -> Unit,
-    val log: suspend (String) -> Unit,
-    val markOrderSent: suspend (orderId: String, sentAt: Long) -> Unit,
-    val markOrderConfirmed: suspend (
-        orderId: String,
-        confirmationAt: Long,
-        confirmationLatencyMs: Long
-    ) -> Unit,
-    val markOrderAccepted: suspend (orderId: String, acceptedAt: Long) -> Unit,
-    val markAssemblingStarted: suspend (
-        orderId: String,
-        assemblingStartedAt: Long,
-        acceptedToAssemblingMs: Long?
-    ) -> Unit,
-    val insertOrderWithState: suspend (order: AssemblyTransportOrder, state: AssemblyTransportOrderStates) -> Unit
-)
-
-enum class ValidationOutcome { VALID, INVALID }
-
-data class AssemblyTimeouts(
-    val confirmationTimeout: Duration = 30.seconds,
-    val deliveryTimeout: Duration = 300.seconds,
-    val validationTimeout: Duration = 30.seconds
-)
-
-data class AssemblyResult(
-    val order: AssemblyTransportOrder,
-    val finalSystemState: AssemblySystemStates,
-    val reportedOrderState: AssemblyTransportOrderStates
-)
 
 class AssemblyStateMachine(
     private val scope: CoroutineScope,
@@ -184,14 +146,14 @@ class AssemblyStateMachine(
                         AssemblySystemStates.ASSEMBLY_TIMED_OUT
                     )
                 }
-                ValidationOutcome.INVALID -> {
+                AssemblyValidationOutcome.INVALID -> {
                     finishAndReturn(
                         order,
                         AssemblyTransportOrderStates.DENIED,
                         AssemblySystemStates.ASSEMBLY_INVALID
                     )
                 }
-                ValidationOutcome.VALID -> {
+                AssemblyValidationOutcome.VALID -> {
                     finishAndReturn(
                         order,
                         AssemblyTransportOrderStates.COMPLETED,
