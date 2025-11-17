@@ -1,13 +1,11 @@
 package com.group9.asaa.assembly.service
 
 import com.group9.asaa.classes.assembly.*
-import com.group9.asaa.misc.Locations
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeoutOrNull
-import com.group9.asaa.classes.assembly.AssemblyValidationOutcome
 
 
 class AssemblyStateMachine(
@@ -43,25 +41,16 @@ class AssemblyStateMachine(
         transition(finalSystemState)
         notifyStatus(reported)
         log("Finish order ${order.orderId}: finalState=$finalSystemState, reported=$reported")
-        ports.insertOrderWithState(order, reported)
+        ports.insertOrderWithState(reported)
         return AssemblyResult(order, state.value, reported)
     }
 
-    suspend fun run(
-        blueprint: Blueprint,
-        deliveryLocation: Locations = Locations.ASSEMBLY_LINE_A,
-        orderId: String
-    ): AssemblyResult {
+    suspend fun run(order: AssemblyTransportOrder): AssemblyResult {
         require(scope.isActive) { "State machine scope is not active." }
 
         transition(AssemblySystemStates.CREATING_ORDER)
-        val order = AssemblyTransportOrder(
-            orderId = orderId,
-            components = blueprint.components,
-            deliveryLocation = deliveryLocation
-        )
         transition(AssemblySystemStates.ORDER_CREATED)
-        ports.log("Created assembly transport order ${order.orderId} with ${order.components.size} components.")
+        ports.log("Created assembly transport order ${order.orderId} with ${order.components.size} components to location ${order.deliveryLocation}.")
 
         transition(AssemblySystemStates.SENDING_ORDER)
         ports.sendOrder(order)
@@ -127,7 +116,7 @@ class AssemblyStateMachine(
         try {
             transition(AssemblySystemStates.ASSEMBLING)
             notifyStatus(AssemblyTransportOrderStates.IN_PROGRESS)
-            ports.insertOrderWithState(order, AssemblyTransportOrderStates.IN_PROGRESS)
+            ports.insertOrderWithState(AssemblyTransportOrderStates.IN_PROGRESS)
             log("Starting assembly for order ${order.orderId}...")
 
             val assemblingNow = System.currentTimeMillis()

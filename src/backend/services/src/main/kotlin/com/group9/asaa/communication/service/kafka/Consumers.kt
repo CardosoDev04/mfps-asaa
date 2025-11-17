@@ -1,8 +1,8 @@
 package com.group9.asaa.communication.service.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.CommunicationState
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.CommunicationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

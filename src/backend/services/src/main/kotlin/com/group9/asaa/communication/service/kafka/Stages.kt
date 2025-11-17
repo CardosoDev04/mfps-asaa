@@ -1,8 +1,8 @@
 package com.group9.asaa.communication.service.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.FailureReason
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.FailureReason
 import com.group9.asaa.communication.service.CommunicationStateMachine
 import com.group9.asaa.communication.service.outbox.DuplicationGate
 import com.group9.asaa.communication.service.outbox.OutboxRecord

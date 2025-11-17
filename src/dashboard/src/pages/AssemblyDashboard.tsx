@@ -206,14 +206,12 @@ export default function AssemblyDashboard() {
         { method: "POST" }
       );
 
-      // Check if the response is OK
       if (!res.ok) {
         throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
       }
 
       const list = await res.json();
 
-      // Ensure the response is an array
       if (!Array.isArray(list)) {
         throw new TypeError(
           "Expected an array of orders, but received something else."

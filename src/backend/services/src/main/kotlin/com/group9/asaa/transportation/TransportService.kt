@@ -2,8 +2,8 @@ package com.group9.asaa.transportation
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.CommunicationState
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.CommunicationState
 import com.group9.asaa.communication.service.kafka.KafkaConfiguration
 import com.group9.asaa.communication.service.kafka.ReceiveStage
 import kotlinx.coroutines.CoroutineScope

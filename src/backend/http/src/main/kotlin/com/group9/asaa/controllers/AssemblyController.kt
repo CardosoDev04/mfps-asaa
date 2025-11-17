@@ -3,6 +3,7 @@ package com.group9.asaa.controllers
 import com.group9.asaa.assembly.service.AssemblyService
 import com.group9.asaa.assembly.service.IAssemblyService
 import com.group9.asaa.classes.assembly.*
+import com.group9.asaa.misc.Locations
 import kotlinx.coroutines.launch
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -15,7 +16,7 @@ class AssemblyController(
 ) {
     @PostMapping("/transport-order")
     suspend fun createTransportOrder(
-        @RequestParam(defaultValue = "false") demo: Boolean
+        @RequestParam(defaultValue = "false") demo: Boolean,
     ): ResponseEntity<AssemblyTransportOrder> {
         val dummyBlueprint = Blueprint(
             id = "bp-001",
@@ -23,7 +24,8 @@ class AssemblyController(
             components = emptyList(),
             attachments = emptyList()
         )
-        val transportOrder = assemblyService.createOrder(dummyBlueprint, demo)
+        val transportOrder =
+            assemblyService.createOrder(dummyBlueprint, demo)
         return ResponseEntity.ok(transportOrder)
     }
 

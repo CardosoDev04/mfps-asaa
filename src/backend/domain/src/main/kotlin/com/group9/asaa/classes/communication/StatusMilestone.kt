@@ -1,4 +1,4 @@
-package com.group9.asaa.classes.communication.model
+package com.group9.asaa.classes.communication
 
 /**
  * Business status milestones (subset). Extend as needed.

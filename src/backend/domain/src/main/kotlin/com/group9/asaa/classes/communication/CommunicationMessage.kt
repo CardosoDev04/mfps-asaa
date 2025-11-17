@@ -1,4 +1,4 @@
-package com.group9.asaa.classes.communication.model
+package com.group9.asaa.classes.communication
 
 /**
  * Canonical message representation that flows through the communication pipeline.

@@ -25,5 +25,5 @@ data class AssemblyPorts(
         assemblingStartedAt: Long,
         acceptedToAssemblingMs: Long?
     ) -> Unit,
-    val insertOrderWithState: suspend (order: AssemblyTransportOrder, state: AssemblyTransportOrderStates) -> Unit
+    val insertOrderWithState: suspend (state: AssemblyTransportOrderStates) -> Unit
 )

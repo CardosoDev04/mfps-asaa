@@ -1,8 +1,8 @@
 package com.group9.asaa.assembly.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.group9.asaa.classes.communication.model.CommunicationMessage
-import com.group9.asaa.classes.communication.model.CommunicationState
+import com.group9.asaa.classes.communication.CommunicationMessage
+import com.group9.asaa.classes.communication.CommunicationState
 import com.group9.asaa.communication.service.kafka.KafkaConfiguration
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
