@@ -42,10 +42,7 @@ enum class StatusMilestone { RECEIVED, CONNECTED, SENDING, SENT, NOTIFIED, FAILE
  * Terminal failure reasons could be expanded.
  */
 sealed class FailureReason(val reason: String) {
-    data object ValidationFailed: FailureReason("validation_failed")
     data object EnrichmentFailed: FailureReason("enrichment_failed")
-    data object DeliveryFailed: FailureReason("delivery_failed")
-    data class Unknown(val details: String): FailureReason("unknown")
 }
 
 /**

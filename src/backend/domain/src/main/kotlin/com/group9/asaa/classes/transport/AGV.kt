@@ -11,16 +11,4 @@ data class AGV(
         state = AGVState.UNAVAILABLE
         isWorking = true
     }
-
-    fun deliverParts() = apply { state = AGVState.UNAVAILABLE }
-
-    fun returnHome() = apply {
-        state = AGVState.AVAILABLE
-        isWorking = false
-        pickupPlace = null
-    }
-
-    fun setPickup(location: Locations) {
-        pickupPlace = location
-    }
 }

@@ -32,7 +32,7 @@ class KafkaTransportPorts(
         )
     }
 
-    override suspend fun awaitConfirmation(): Boolean? {
+    override suspend fun awaitConfirmation(): Boolean {
         // purely internal simulation: we don't ask assembly here
         delay(confirmationDelay.inWholeMilliseconds)
         return true // always confirm for now; could be configurable

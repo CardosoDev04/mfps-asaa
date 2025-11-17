@@ -26,7 +26,7 @@ class SseBroadcaster(
     private val emitters = CopyOnWriteArrayList<SseEmitter>()
 
     fun subscribe(): SseEmitter {
-        val emitter = SseEmitter(0L) // no timeout; rely on heartbeat
+        val emitter = SseEmitter(0L)
         emitters.add(emitter)
         emitter.onCompletion { emitters.remove(emitter) }
         emitter.onTimeout { emitters.remove(emitter) }
@@ -81,7 +81,7 @@ class SseBroadcaster(
     private fun broadcastComment(comment: String) {
         emitters.forEach { em ->
             try {
-                em.send(":" + comment) // colon-prefixed comment line per SSE spec
+                em.send(":$comment")
             } catch (_: Exception) { emitters.remove(em) }
         }
     }

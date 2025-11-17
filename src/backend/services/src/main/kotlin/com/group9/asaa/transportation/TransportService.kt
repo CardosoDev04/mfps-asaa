@@ -24,7 +24,7 @@ class TransportService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val concurrency = Semaphore(2)
+    private val concurrency = Semaphore(3)
 
     /**
      * Listen to outbound messages and react to TRANSPORT_ORDERs that
@@ -63,7 +63,7 @@ class TransportService(
                         receiveStage = receiveStage,
                         events = events
                     )
-                    val sm = TransportStateMachine(this, ports, events)
+                    val sm = TransportStateMachine(ports, events)
 
                     val result = sm.run(order)
                     log.info(

@@ -63,7 +63,7 @@ class CommunicationConsumers(
     }
 
     // Periodic outbox drain simulating delivery worker
-    @Scheduled(fixedDelay = 500)
+    @Scheduled(fixedDelay = 200)
     fun drainOutbox() {
         sendStage.drainOutbox()
     }
