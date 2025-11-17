@@ -13,6 +13,8 @@ class AssemblyStateMachine(
     private val ports: AssemblyPorts,
     private val timeouts: AssemblyTimeouts = AssemblyTimeouts()
 ) {
+    private lateinit var currentOrder: AssemblyTransportOrder
+
     private val _state = MutableStateFlow(AssemblySystemStates.IDLE)
     val state: StateFlow<AssemblySystemStates> = _state
 
@@ -20,12 +22,20 @@ class AssemblyStateMachine(
     private var confirmationAtMs: Long? = null
     private var acceptedAtMs: Long? = null
 
+    private var transportArrivedAtMs: Long? = null
+    private var assemblyCompletedAtMs: Long? = null
+
+    private var startedAtMs: Long? = null
+
     private suspend fun log(msg: String) {
         ports.log(msg)
     }
 
     private suspend fun transition(to: AssemblySystemStates) {
+        val from = _state.value
         _state.value = to
+
+        ports.recordStateTransition(currentOrder.orderId, from, to)
         log("Transition → $to")
     }
 
@@ -42,11 +52,27 @@ class AssemblyStateMachine(
         notifyStatus(reported)
         log("Finish order ${order.orderId}: finalState=$finalSystemState, reported=$reported")
         ports.insertOrderWithState(reported)
+
+        val finishedAt = System.currentTimeMillis()
+        val totalLeadTimeMs = startedAtMs?.let { finishedAt - it } ?: 0L
+
+        ports.markOrderFinalized(
+            order.orderId,
+            finishedAt,
+            totalLeadTimeMs,
+            finalSystemState,
+            reported
+        )
+
         return AssemblyResult(order, state.value, reported)
     }
 
+
     suspend fun run(order: AssemblyTransportOrder): AssemblyResult {
         require(scope.isActive) { "State machine scope is not active." }
+
+        startedAtMs = System.currentTimeMillis()
+        currentOrder = order
 
         transition(AssemblySystemStates.CREATING_ORDER)
         transition(AssemblySystemStates.ORDER_CREATED)
@@ -110,6 +136,9 @@ class AssemblyStateMachine(
         }
 
         transition(AssemblySystemStates.RECEIVED_TRANSPORT)
+        transportArrivedAtMs = System.currentTimeMillis()
+        val latency = acceptedAtMs?.let { transportArrivedAtMs!! - it } ?: 0L
+        ports.markTransportFulfilled(order.orderId, transportArrivedAtMs!!, latency)
         log("Transport arrived for order ${order.orderId}. Waiting for assembly slot...")
 
         ports.acquireAssemblyPermit()
@@ -143,11 +172,12 @@ class AssemblyStateMachine(
                     )
                 }
                 AssemblyValidationOutcome.VALID -> {
-                    finishAndReturn(
-                        order,
-                        AssemblyTransportOrderStates.COMPLETED,
-                        AssemblySystemStates.ASSEMBLY_COMPLETED
-                    )
+                    val now = System.currentTimeMillis()
+                    assemblyCompletedAtMs = now
+                    val duration = acceptedAtMs?.let { now - it } ?: 0L
+                    ports.markAssemblyCompleted(order.orderId, now, duration)
+
+                    finishAndReturn(order, AssemblyTransportOrderStates.COMPLETED, AssemblySystemStates.ASSEMBLY_COMPLETED)
                 }
             }
         } finally {

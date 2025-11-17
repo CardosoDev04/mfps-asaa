@@ -82,6 +82,7 @@ class AssemblyService(
     private val _overallSystemState = MutableStateFlow(AssemblySystemStates.IDLE)
 
     private data class Enqueued(
+        val orderId: String,
         val blueprint: Blueprint,
         val demo: Boolean,
         val reply: CompletableDeferred<AssemblyTransportOrder>,
@@ -103,7 +104,21 @@ class AssemblyService(
         scope.launch {
             for (req in queue) {
                 try {
-                    val created = runOne(req.blueprint, req.demo, req.testRunId, req.deliveryLocation)
+                    metricsRepo.recordQueueEvent(
+                        orderId = req.orderId,
+                        line = req.deliveryLocation.name,
+                        eventType = "DEQUEUED",
+                        queueSize = _queueSize.value - 1,
+                        pendingOnLine = pendingPerLine[req.deliveryLocation]?.get() ?: 0
+                    )
+
+                    val created = runOne(
+                        orderId = req.orderId,
+                        orderBlueprint = req.blueprint,
+                        demo = req.demo,
+                        testRunId = req.testRunId,
+                        deliveryLocation = req.deliveryLocation
+                    )
                     req.reply.complete(created)
                 } catch (t: Throwable) {
                     req.reply.completeExceptionally(t)
@@ -114,20 +129,34 @@ class AssemblyService(
         }
     }
 
+
     override suspend fun createOrder(
         orderBlueprint: Blueprint,
         demo: Boolean,
         testRunId: String?
     ): AssemblyTransportOrder {
+        val orderId = "order-${UUID.randomUUID()}"
         val reply = CompletableDeferred<AssemblyTransportOrder>()
 
         val chosenLocation = pickDeliveryLocation()
         incPending(chosenLocation)
 
-        log.info("Routing new order to $chosenLocation")
+        val currentQueueSize = _queueSize.value
+        val pendingOnLine = pendingPerLine[chosenLocation]?.get() ?: 0
+
+        metricsRepo.recordQueueEvent(
+            orderId = orderId,
+            line = chosenLocation.name,
+            eventType = "ENQUEUED",
+            queueSize = currentQueueSize + 1,
+            pendingOnLine = pendingOnLine + 1
+        )
+
+        log.info("Routing new order $orderId to $chosenLocation")
 
         val offered = queue.trySend(
             Enqueued(
+                orderId = orderId,
                 blueprint = orderBlueprint,
                 demo = demo,
                 reply = reply,
@@ -144,8 +173,14 @@ class AssemblyService(
         return reply.await()
     }
 
-    private suspend fun runOne(orderBlueprint: Blueprint, demo: Boolean, testRunId: String?, deliveryLocation: Locations): AssemblyTransportOrder {
-        val orderId = "order-${UUID.randomUUID()}"
+
+    private suspend fun runOne(
+        orderId: String,
+        orderBlueprint: Blueprint,
+        demo: Boolean,
+        testRunId: String?,
+        deliveryLocation: Locations
+    ): AssemblyTransportOrder {
         val myState = orderStates.computeIfAbsent(orderId) { MutableStateFlow(AssemblySystemStates.IDLE) }
 
         val order = AssemblyTransportOrder(
@@ -290,6 +325,68 @@ class AssemblyService(
             },
             insertOrderWithState = { state ->
                 metricsRepo.insertOrderWithState(order, state)
+            },
+            markTransportFulfilled = { oid, fulfilledAtMs, latencyMs ->
+                try {
+                    metricsRepo.markTransportFulfilled(
+                        oid,
+                        java.time.Instant.ofEpochMilli(fulfilledAtMs),
+                        latencyMs
+                    )
+                } catch (e: Exception) {
+                    log.error("markTransportFulfilled failed for $oid: ${e.message}", e)
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "log",
+                            message = "markTransportFulfilled failed for $oid: ${e.message}",
+                            orderId = orderId
+                        )
+                    )
+                }
+            },
+
+            markAssemblyCompleted = { oid, completedAtMs, durationMs ->
+                try {
+                    metricsRepo.markAssemblyCompleted(
+                        oid,
+                        java.time.Instant.ofEpochMilli(completedAtMs),
+                        durationMs
+                    )
+                } catch (e: Exception) {
+                    log.error("markAssemblyCompleted failed for $oid: ${e.message}", e)
+                    _events.tryEmit(
+                        AssemblyEvent(
+                            kind = "log",
+                            message = "markAssemblyCompleted failed for $oid: ${e.message}",
+                            orderId = orderId
+                        )
+                    )
+                }
+            },
+            recordStateTransition = { _, from, to ->
+                try {
+                    metricsRepo.recordStateTransition(
+                        orderId = order.orderId,
+                        subsystem = "assembly",
+                        fromState = from?.name,
+                        toState = to.name
+                    )
+                } catch (e: Exception) {
+                    log.error("recordStateTransition failed for ${order.orderId}: ${e.message}", e)
+                }
+            },
+            markOrderFinalized = { _, completedAtMs, totalLeadTimeMs, finalSystemState, finalOrderState ->
+                try {
+                    metricsRepo.markOrderFinalized(
+                        orderId = order.orderId,
+                        completedAt = java.time.Instant.ofEpochMilli(completedAtMs),
+                        totalLeadTimeMs = totalLeadTimeMs,
+                        finalSystemState = finalSystemState.name,
+                        finalOrderState = finalOrderState.name
+                    )
+                } catch (e: Exception) {
+                    log.error("markOrderFinalized failed for ${order.orderId}: ${e.message}", e)
+                }
             }
         )
 

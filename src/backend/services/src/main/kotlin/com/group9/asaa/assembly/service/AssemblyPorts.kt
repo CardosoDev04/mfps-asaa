@@ -1,5 +1,6 @@
 package com.group9.asaa.assembly.service
 
+import com.group9.asaa.classes.assembly.AssemblySystemStates
 import com.group9.asaa.classes.assembly.AssemblyTransportOrder
 import com.group9.asaa.classes.assembly.AssemblyTransportOrderStates
 import com.group9.asaa.classes.assembly.AssemblyValidationOutcome
@@ -25,5 +26,27 @@ data class AssemblyPorts(
         assemblingStartedAt: Long,
         acceptedToAssemblingMs: Long?
     ) -> Unit,
-    val insertOrderWithState: suspend (state: AssemblyTransportOrderStates) -> Unit
+    val insertOrderWithState: suspend (state: AssemblyTransportOrderStates) -> Unit,
+    val markTransportFulfilled: suspend (
+        orderId: String,
+        fulfilledAt: Long,
+        transportLatencyMs: Long
+    ) -> Unit,
+    val markAssemblyCompleted: suspend (
+        orderId: String,
+        completedAt: Long,
+        assemblyDurationMs: Long
+    ) -> Unit,
+    val recordStateTransition: suspend (
+        orderId: String,
+        fromState: AssemblySystemStates?,
+        toState: AssemblySystemStates
+    ) -> Unit,
+    val markOrderFinalized: suspend (
+        orderId: String,
+        completedAt: Long,
+        totalLeadTimeMs: Long,
+        finalSystemState: AssemblySystemStates,
+        finalOrderState: AssemblyTransportOrderStates
+    ) -> Unit
 )
