@@ -99,7 +99,7 @@ export default function AssemblyDashboard() {
   useEffect(() => {
     if (esRef.current) return;
 
-    const es = new EventSource("http://localhost:8080/assembly/events");
+    const es = new EventSource("http://backend:8080/assembly/events");
     es.onmessage = () => {};
 
     const handleEvent = (type: "state" | "status" | "log", e: MessageEvent) => {
@@ -176,7 +176,7 @@ export default function AssemblyDashboard() {
     setCreating(true);
     try {
       const res = await fetch(
-        `http://localhost:8080/assembly/transport-order?demo=false`,
+        `http://backend:8080/assembly/transport-order?demo=false`,
         {
           method: "POST",
         }
@@ -202,7 +202,7 @@ export default function AssemblyDashboard() {
     const testRunId = Math.random().toString(36).substring(2, 14);
     try {
       const res = await fetch(
-        `http://localhost:8080/assembly/transport-order/bulk?n=${count}&demo=false&testRunId=${testRunId}`,
+        `http://backend:8080/assembly/transport-order/bulk?n=${count}&demo=false&testRunId=${testRunId}`,
         { method: "POST" }
       );
 

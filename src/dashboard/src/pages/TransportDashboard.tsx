@@ -102,7 +102,7 @@ export default function TransportDashboard() {
   useEffect(() => {
     if (esRef.current) return;
 
-    const es = new EventSource("http://localhost:8080/transport/events");
+    const es = new EventSource("http://backend:8080/transport/events");
     es.onmessage = () => {};
 
     const handleEvent = (type: "state" | "status" | "log", e: MessageEvent) => {

@@ -4,7 +4,7 @@ export async function createOneAssemblyOrder(
   demo: boolean
 ): Promise<AssemblyTransportOrder> {
   const res = await fetch(
-    `http://localhost:8080/assembly/transport-order?demo=${demo}`,
+    `http://backend:8080/assembly/transport-order?demo=${demo}`,
     {
       method: "POST",
     }
@@ -19,7 +19,7 @@ export async function createBulkAssemblyOrders(
   testRunId: string
 ): Promise<AssemblyTransportOrder[]> {
   const res = await fetch(
-    `http://localhost:8080/assembly/transport-order/bulk?n=${count}&demo=${demo}&testRunId=${testRunId}`,
+    `http://backend:8080/assembly/transport-order/bulk?n=${count}&demo=${demo}&testRunId=${testRunId}`,
     { method: "POST" }
   );
   const list: AssemblyTransportOrder[] = await res.json();

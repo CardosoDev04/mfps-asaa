@@ -1,7 +1,7 @@
 import type { TestReport } from "../@types/TestReport";
 
 export async function getAllTestReports(): Promise<TestReport[]> {
-  const res = await fetch(`http://localhost:8080/test-reports/all`, {
+  const res = await fetch(`http://backend:8080/test-reports/all`, {
     method: "GET",
   });
   const reports: TestReport[] = await res.json();
@@ -9,7 +9,7 @@ export async function getAllTestReports(): Promise<TestReport[]> {
 }
 
 export async function getTestReportById(id: string): Promise<TestReport> {
-  const res = await fetch(`http://localhost:8080/test-reports/${id}`, {
+  const res = await fetch(`http://backend:8080/test-reports/${id}`, {
     method: "GET",
   });
   const report: TestReport = await res.json();
