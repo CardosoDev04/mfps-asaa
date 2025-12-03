@@ -2,7 +2,9 @@ package com.group9.asaa.classes.transport
 
 object AGVPool {
     private val pool = mutableListOf(
-        AGV("AGV-1"), AGV("AGV-2"), AGV("AGV-3")
+        AGV("AGV-1"),
+        AGV("AGV-2"),
+        AGV("AGV-3")
     )
 
     fun snapshot(): List<AGV> = pool.toList()

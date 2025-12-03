@@ -1,462 +1,89 @@
-Below is **clear, structured, beginner-friendly documentation** for your entire assembly-order system — including architecture, concurrency model, state machine flow, event streaming, sequencing guarantees, and frontend consumption.
+# Backend Documentation
 
----
+## Overview
 
-# 📦 **Assembly Order Processing System — Full Documentation**
+The backend is a modular, event-driven system built with **Kotlin** and **Spring Boot**. It leverages **Coroutines** for asynchronous processing and **Kafka** for inter-service communication. The system is designed to handle assembly transport orders, manage communication between subsystems, and simulate transport logistics.
 
-*A Beginner-Friendly Guide to Understanding the Architecture, Concurrency Model, State Machine, and Event Flow*
+## Architecture
 
----
+The backend is structured into several Gradle modules:
 
-# 1. 🎯 **High-Level Overview**
+-   **`http`**: Contains the REST API controllers and SSE endpoints.
+-   **`services`**: Contains the core business logic, state machines, and service integrations.
+-   **`domain`**: Defines the data models, entities, and value objects.
+-   **`repositories`**: Handles data persistence and database access.
 
-This system simulates an *automated assembly line* that processes transport orders.
+### Key Components
 
-Each **order** goes through:
+1.  **Assembly Service**: Manages the lifecycle of assembly orders. It handles order creation, queueing, state transitions, and coordination with the transport subsystem.
+2.  **Communication Service**: Facilitates reliable messaging between subsystems using the **Outbox Pattern**. It processes messages through stages: Receive, Connect, Send, and Notify.
+3.  **Transport Service**: Simulates the transport subsystem. It listens for transport orders and executes them using a state machine.
 
-1. Creation
-2. Confirmation
-3. Transport Arrival
-4. Assembly
-5. Validation
-6. Completion / Failure
+## Data Flow
 
-These steps are orchestrated using:
+### 1. Order Creation Flow
 
-* **A per-order coroutine state machine** (`AssemblyStateMachine`)
-* **A global queue** to serialize order creation
-* **A single-assembly-at-a-time semaphore** to prevent parallel assembly
-* **MutableStateFlow** to propagate state transitions
-* **Server-Sent Events (SSE)** to stream logs, state transitions, and status updates to the frontend
+1.  **API Request**: A client sends a `POST /assembly/transport-order` request.
+2.  **AssemblyService**:
+    *   The service picks a delivery location (load balancing based on pending orders).
+    *   The order is placed in an internal `Channel` (queue).
+    *   The API responds immediately with the created order details.
+3.  **Processing (Background Coroutine)**:
+    *   Orders are dequeued and processed one by one.
+    *   An `AssemblyStateMachine` is initialized for the order.
+    *   A `TRANSPORT_ORDER` message is sent to the Transport subsystem via the Communication Service.
+4.  **State Transitions**: The order goes through various states (e.g., `IDLE`, `ASSEMBLING`) based on events (confirmation, arrival, validation).
 
-The system guarantees:
+### 2. Communication Flow
 
-✔ Orders are created in queue order
-✔ Only **one order is assembled at any given time**
-✔ Real-time logs and state transitions are streamed to the UI
-✔ Every order runs inside its own isolated coroutine scope
-✔ Frontend receives state, logs, statuses separately
+The communication system ensures reliable message delivery:
 
----
+1.  **Receive Stage**: Accepts a message, persists it, and publishes to the `inbound` Kafka topic.
+2.  **Connect Stage**: Consumes from `inbound`, enriches the message, and publishes to `connected`.
+3.  **Send Stage**:
+    *   Consumes from `connected`.
+    *   Saves the message to an **Outbox** table (database).
+    *   Publishes to the `outbound` Kafka topic.
+4.  **Delivery**: Messages are consumed from `outbound` by the target subsystem (e.g., Transport Service).
 
-# 2. 🧠 **Core Components**
+### 3. Transport Flow
 
-The system has four major pieces:
+1.  **Listener**: The `TransportService` listens to the `outbound` Kafka topic.
+2.  **Filter**: It filters for `TRANSPORT_ORDER` messages destined for the `transport` subsystem.
+3.  **Execution**:
+    *   A `TransportStateMachine` is launched for the order.
+    *   It simulates the transport process (moving, arrived, etc.).
+    *   Events are emitted back to the system via the Event Bus.
 
----
+## API Reference
 
-## 🔹 **1. AssemblyService**
+### Assembly Endpoints (`/assembly`)
 
-The **central orchestrator**.
+-   `POST /transport-order`: Create a single transport order.
+    -   Params: `demo` (boolean).
+-   `POST /transport-order/bulk`: Create multiple orders.
+    -   Params: `n` (count), `demo` (boolean), `testRunId`.
+-   `GET /queue-size`: Get the current number of enqueued orders.
+-   `GET /system-state`: Get the overall system state (e.g., `IDLE`, `ASSEMBLING`).
+-   `PUT /confirm-order`: Manually confirm an order.
+-   `PUT /signal-transport-arrived`: Manually signal transport arrival.
+-   `PUT /validate-assembly`: Manually validate an assembly.
+-   `GET /events`: **SSE** stream of assembly events (status, logs, state changes).
 
-Responsibilities:
+### Communication Endpoints (`/communication`)
 
-* Receives order creation requests
-* Manages the order queue (max 100)
-* Spawns an isolated coroutine for each order
-* Maintains per-order state (`orderStates`)
-* Publishes events to frontend via `_events` (a `MutableSharedFlow`)
-* Ensures only one assembly happens at a time using `assemblyGate` semaphore
+-   `POST /messages`: Send a generic message between subsystems.
+-   `GET /events`: **SSE** stream of communication events.
 
----
+### Transport Endpoints (`/transport`)
 
-## 🔹 **2. AssemblyStateMachine**
+-   `GET /events`: **SSE** stream of transport events.
 
-A pure state machine that:
+## Key Features
 
-* Holds the current state (`MutableStateFlow`)
-* Performs all state transitions
-* Emits logs `"Transition → XYZ"`
-* Calls out to ports (I/O actions)
-* Handles all timeouts
-
-The state machine is deterministic — the same blueprint yields the same transitions unless timeouts occur.
-
----
-
-## 🔹 **3. AssemblyPorts**
-
-A dependency-injection container of callbacks.
-
-The state machine does NOT know:
-
-* How to send an order
-* How to wait for confirmation
-* How to wait for transport
-* How assembly is validated
-* How logs are forwarded
-* How statuses are emitted
-* How concurrency is enforced
-
-All these details are injected through `AssemblyPorts`.
-
-This makes the state machine pure and testable.
-
----
-
-## 🔹 **4. Frontend (React Dashboard)**
-
-A UI that listens to:
-
-* `"state"` events
-* `"status"` events
-* `"log"` events
-
-And builds:
-
-* State history
-* Status history
-* Logs
-* Progress UI
-* Per-order detail cards
-
-Communication uses **Server-Sent Events (SSE)** — simple, lightweight, always-open stream from backend → browser.
-
----
-
-# 3. ⚙️ **Execution Flow (Step-by-Step)**
-
-Below is the full lifecycle of **ONE** order from creation to completion.
-
----
-
-## 🧾 **Step 1 — Client requests an order**
-
-```
-POST /assembly/transport-order?demo=true
-```
-
-AssemblyService:
-
-* Adds request to `queue`
-* Responds with an `AssemblyTransportOrder` (orderId assigned)
-
----
-
-## 🕑 **Step 2 — Global Queue Processes It**
-
-The queue is consumed by:
-
-```kotlin
-scope.launch {
-    for(req in queue) {
-        runOne(...)
-    }
-}
-```
-
-This guarantees:
-
-* Orders are processed one-by-one in FIFO order
-* No overload beyond capacity 100
-* Each order is created in the order requested
-
-But *assembly itself* still respects the semaphore — two orders may be created simultaneously, but only one assembles at a time.
-
----
-
-## 🚀 **Step 3 — runOne() is called**
-
-`runOne()` sets up the entire execution environment for a single order:
-
-### It creates:
-
-* Per-order state flows
-* Per-order flows for confirmation, arrival, validation
-* Per-order coroutine scope (`orderScope`)
-* The state machine instance
-* A state collector that forwards transitions to SSE
-
-### Then it starts:
-
-* `stateCollector` (listens to machine.state)
-* `machineJob` (runs the state machine)
-
----
-
-## 🧭 **Step 4 — StateMachine.run()**
-
-The state machine walks through **14 possible system states**:
-
-```
-CREATING_ORDER
-ORDER_CREATED
-SENDING_ORDER
-RECEIVING_CONFIRMATION
-EVALUATING_CONFIRMATION
-ORDER_ACCEPTED / ORDER_DENIED / ORDER_TIMED_OUT
-WAITING_FOR_TRANSPORT
-ASSEMBLING
-ASSEMBLY_COMPLETED / ASSEMBLY_INVALID / ASSEMBLY_TIMED_OUT
-```
-
-Every transition:
-
-* Updates its internal `MutableStateFlow`
-* Emits a log event: `"Transition → <STATE>"`
-* Is forwarded to the frontend by the state collector
-
----
-
-## 🙋 **Step 5 — The system waits for external events**
-
-The system suspends and waits for:
-
-### ✔ Order confirmation
-
-Via:
-
-```kotlin
-awaitOrderConfirmation()
-```
-
-Controlled by:
-
-```
-PUT /assemble/confirm-order?orderId=x&accepted=true
-```
-
----
-
-### ✔ Transport arrival
-
-Via:
-
-```kotlin
-awaitTransportArrival()
-```
-
-Controlled by:
-
-```
-PUT /assembly/signal-transport-arrived?orderId=x
-```
-
----
-
-### ✔ Assembly validation
-
-Via:
-
-```kotlin
-performAssemblyAndValidate()
-```
-
-Controlled by:
-
-```
-PUT /assembly/validate-assembly?orderId=x&valid=true
-```
-
----
-
-Each step has a timeout:
-
-| Step              | Timeout |
-| ----------------- | ------- |
-| Confirmation      | 5s      |
-| Transport Arrival | 300s    |
-| Validation        | 40s     |
-
-If a timeout occurs, the state machine transitions to a terminal error state.
-
----
-
-## 🔒 **Step 6 — Assembly Semaphore**
-
-```kotlin
-assemblyGate.acquire()
-...
-assemblyGate.release()
-```
-
-This ensures:
-
-* Only **one** order is assembled at a time
-* Others must wait in `WAITING_FOR_TRANSPORT` or before assembly
-
-Even if you POST 100 orders at once, they will assemble sequentially.
-
----
-
-## 🎉 **Step 7 — Completion & Cleanup**
-
-When the machine finishes:
-
-* Final state is emitted
-* `orderStates[orderId]` is updated
-* Confirmation / arrival / validation flows are removed
-* `orderScope` is cancelled (which also stops the collectors)
-
----
-
-# 4. 📡 **Event Streaming (SSE)**
-
-The backend sends **three types** of events:
-
-### 1. `state`
-
-Emitted whenever the state machine transitions:
-
-```json
-{
-  "kind": "state",
-  "state": "ASSEMBLING",
-  "orderId": "order-xyz",
-  "ts": 1710000000000
-}
-```
-
-### 2. `status`
-
-Business status (ACCEPTED, COMPLETED, etc)
-
-```json
-{
-  "kind": "status",
-  "message": "COMPLETED",
-  "orderId": "order-xyz",
-  "ts": 1710000000000
-}
-```
-
-### 3. `log`
-
-Human-readable debug logs
-
-```json
-{
-  "kind": "log",
-  "message": "Transition → ASSEMBLY_COMPLETED",
-  "orderId": "order-xyz",
-  "ts": 1710000000000
-}
-```
-
-The React frontend merges these into:
-
-* Timeline of states
-* Timeline of statuses
-* Log list
-
----
-
-# 5. 🖥️ **Frontend Responsibilities**
-
-The React app:
-
-* Connects once via an EventSource
-* Listens to `state`, `status`, `log`
-* Keeps a record per-order:
-
-```ts
-{
-  order: AssemblyTransportOrder,
-  lastState: AssemblySystemStates,
-  lastStatus: OrderStatus,
-  logs: [],
-  stateHistory: [],
-  statusHistory: []
-}
-```
-
-It renders:
-
-* Order card
-* Live state badge
-* Progress bar based on state
-* Collapsible logs/history
-* Status badge (ACCEPTED, COMPLETED, etc)
-
-It does **not** infer states — it only displays what SSE sends, ensuring correctness.
-
----
-
-# 6. 📚 **State Machine Flow Diagram**
-
-```
-CREATING_ORDER
-      ↓
-ORDER_CREATED
-      ↓
-SENDING_ORDER
-      ↓
-RECEIVING_CONFIRMATION
-      ↓
-EVALUATING_CONFIRMATION
-      ├─ null → ORDER_TIMED_OUT → END
-      ├─ false → ORDER_DENIED → END
-      └─ true → ORDER_ACCEPTED
-                        ↓
-            WAITING_FOR_TRANSPORT
-                        ↓ (or timeout → ORDER_TIMED_OUT)
-                  ASSEMBLING
-                        ↓ (validation timeout → ASSEMBLY_TIMED_OUT)
-                        ↓ (invalid → ASSEMBLY_INVALID)
-                        ↓ (valid → ASSEMBLY_COMPLETED)
-```
-
----
-
-# 7. 🏗️ **Key Guarantees**
-
-| Guarantee              | Explanation                                   |
-| ---------------------- | --------------------------------------------- |
-| FIFO order creation    | Queue enforces creation order                 |
-| Single active assembly | Semaphore enforces mutual exclusion           |
-| Real-time updates      | All state/log/status updates streamed via SSE |
-| No state loss          | State collector mirrors every transition      |
-| Per-order isolation    | Each order has its own coroutine scope        |
-| Cleanup after finish   | Flows removed, state stored, scope cancelled  |
-
----
-
-# 8. 🧪 **Demo Mode**
-
-When `demo=true`, the backend simulates:
-
-* Auto-confirmation after 2s
-* Auto-transport after 20s
-* Assembly duration random 10–20 seconds
-* Always VALID validation
-
-This helps test UI and concurrency.
-
----
-
-# 9. 🧹 **Lifecycle Summary**
-
-### For every order:
-
-1. Add to queue
-2. Create flows
-3. Start collectors
-4. Start state machine
-5. Suspend on real events (confirmation, arrival, validation)
-6. Acquire assembly lock
-7. Assemble
-8. Release lock
-9. Emit final state
-10. Cancel scope & cleanup
-
-### For the frontend:
-
-* Always listening
-* Automatically updates state, status, logs
-* No polling needed
-
----
-
-# 10. 🎓 **Conclusion**
-
-This architecture cleanly separates:
-
-✔ Business logic (state machine)
-
-✔ Concurrency and orchestration (AssemblyService + semaphore)
-
-✔ I/O and external events (AssemblyPorts)
-
-✔ Real-time UI updates (SSE)
-
-✔ Visual representation (React Dashboard)
+-   **Asynchronous Processing**: Extensive use of Kotlin Coroutines for non-blocking I/O and concurrent task execution.
+-   **Event-Driven**: Decoupled components communicate via Kafka topics (`inbound`, `connected`, `outbound`, `notifications`).
+-   **Reliability**: Implements the **Outbox Pattern** to ensure data consistency between the database and Kafka.
+-   **Real-Time Updates**: Server-Sent Events (SSE) provide real-time feedback to clients (e.g., dashboards).
+-   **Observability**: Comprehensive logging and metrics recording for every stage of the order lifecycle.
+-   **Simulation Mode**: "Demo" mode allows for autopilot execution of orders for testing and demonstration purposes.

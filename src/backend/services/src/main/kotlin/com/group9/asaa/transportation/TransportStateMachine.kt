@@ -115,7 +115,7 @@ class TransportStateMachine(
                 }
                 ReceiverState.NOTIFYING_STATUS_FULFILLING_ORDER -> {
                     ports.notifyStatus(AssemblyTransportOrderStates.IN_PROGRESS)
-                    val randomDelay = (5000L..5100L).random()
+                    val randomDelay = (20000L..30000L).random()
                     delay(randomDelay)
                     current = ReceiverState.ORDER_FULFILLED
                 }

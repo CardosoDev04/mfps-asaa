@@ -24,7 +24,7 @@ class TransportService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val concurrency = Semaphore(3)
+    private val concurrency = Semaphore(40)
 
     /**
      * Listen to outbound messages and react to TRANSPORT_ORDERs that

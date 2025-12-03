@@ -96,6 +96,48 @@ export default function AssemblyDashboard() {
   const [orders, setOrders] = useState<Record<string, OrderCard>>({});
   const esRef = useRef<EventSource | null>(null);
 
+  const [bulkTestRunning, setBulkTestRunning] = useState(false);
+  const [bulkTestRunIds, setBulkTestRunIds] = useState<string[]>([]);
+  const [bulkTestTimeLeft, setBulkTestTimeLeft] = useState<number | null>(null);
+
+
+  const ordersRef = useRef<Record<string, OrderCard>>({});
+
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
+  function areOrdersCompleted(orderIds: string[]): boolean {
+    const current = ordersRef.current;
+    return orderIds.every(
+      (id) => current[id]?.lastState === "ASSEMBLY_COMPLETED"
+    );
+  }
+  
+  function waitForOrdersCompleted(
+    orderIds: string[],
+    timeoutMs: number = 5 * 60_000
+  ): Promise<void> {
+    const start = Date.now();
+  
+    return new Promise((resolve, reject) => {
+      function check() {
+        if (areOrdersCompleted(orderIds)) {
+          resolve();
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          reject(new Error("Timeout waiting for orders to reach ASSEMBLY_COMPLETED"));
+          return;
+        }
+        setTimeout(check, 500);
+      }
+  
+      check();
+    });
+  }
+  
+
   useEffect(() => {
     if (esRef.current) return;
 
@@ -240,6 +282,77 @@ export default function AssemblyDashboard() {
     }
   }
 
+  async function runFiveMinuteBulkTest() {
+    if (bulkTestRunning) return;
+  
+    setBulkTestRunning(true);
+    setCreating(true);
+    setBulkTestTimeLeft(5 * 60); // 5 minutes = 300 seconds
+  
+    const localTestRunIds: string[] = [];
+    const endAt = Date.now() + 5 * 60_000;
+  
+    // --- NEW: countdown interval ---
+    const interval = setInterval(() => {
+      setBulkTestTimeLeft((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+    // --------------------------------
+  
+    try {
+      while (Date.now() < endAt) {
+        const testRunId = `nfr0_${Date.now().toString(36)}_${Math.random()
+          .toString(36)
+          .slice(2, 6)}`;
+        localTestRunIds.push(testRunId);
+  
+        const res = await fetch(
+          `http://backend:8080/assembly/transport-order/bulk?n=10&demo=false&testRunId=${testRunId}`,
+          { method: "POST" }
+        );
+  
+        if (!res.ok) throw new Error(`Failed ${res.status}`);
+  
+        const ordersList = await res.json();
+        if (!Array.isArray(ordersList)) throw new Error("Expected array");
+  
+        // Register orders in UI
+        setOrders((prev) => {
+          const next = { ...prev };
+          for (const order of ordersList) {
+            if (!next[order.orderId]) {
+              next[order.orderId] = {
+                order,
+                logs: [],
+                events: [],
+                stateHistory: [],
+                statusHistory: [],
+              };
+            }
+          }
+          return next;
+        });
+  
+        const ids = ordersList.map((o) => o.orderId);
+  
+        // Wait until these 10 orders finish
+        await waitForOrdersCompleted(ids, 5 * 60_000);
+      }
+    } catch (err) {
+      console.error("Error in 5-minute test:", err);
+    } finally {
+      clearInterval(interval); // <-- stop countdown
+      setBulkTestTimeLeft(null);
+      setBulkTestRunIds((prev) => [...prev, ...localTestRunIds]);
+      setBulkTestRunning(false);
+      setCreating(false);
+    }
+  }  
+  
+
   const orderList = useMemo(
     () =>
       Object.values(orders).sort((a, b) =>
@@ -280,8 +393,42 @@ export default function AssemblyDashboard() {
         >
           Create {count}
         </button>
+        <button
+          onClick={runFiveMinuteBulkTest}
+          disabled={creating || bulkTestRunning}
+          className="inline-flex items-center rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm hover:bg-indigo-100 disabled:opacity-50"
+        >
+          Run 5-minute NFR0 test (10-at-a-time)
+        </button>
       </div>
 
+      {bulkTestRunIds.length > 0 && (
+        <div className="mb-4 text-xs">
+          <div className="font-semibold mb-1">
+            Recorded testRunIds (for DB queries):
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {bulkTestRunIds.map((id, i) => (
+              <li
+                key={`${id}-${i}`}
+                className="px-2 py-0.5 rounded-full border border-gray-300 bg-gray-50 font-mono"
+              >
+                {id}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {bulkTestRunning && bulkTestTimeLeft !== null && (
+        <div className="mb-4 text-sm font-medium text-indigo-700">
+          Time left:{" "}
+          <span className="font-mono">
+            {String(Math.floor(bulkTestTimeLeft / 60)).padStart(2, "0")}:
+            {String(bulkTestTimeLeft % 60).padStart(2, "0")}
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
         {orderList.map((oc) => {
           const prog = stateProgress(oc.lastState);

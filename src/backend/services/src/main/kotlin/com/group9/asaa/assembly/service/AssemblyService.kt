@@ -218,7 +218,7 @@ class AssemblyService(
             awaitOrderConfirmation = { confirmationFlow.filterNotNull().first() },
             awaitTransportArrival = { transportArrivedFlow.filter { it }.first() },
             performAssemblyAndValidate = {
-                delay((10..20).random() * 1_000L)
+                delay((1..2).random() * 1_000L)
                 AssemblyValidationOutcome.VALID
             },
             notifyStatus = { state ->
@@ -396,7 +396,7 @@ class AssemblyService(
             scope = orderScope,
             ports = ports,
             timeouts = AssemblyTimeouts(
-                confirmationTimeout = 10.seconds,
+                confirmationTimeout = 40.seconds,
                 deliveryTimeout = 300.seconds,
                 validationTimeout = 40.seconds
             )
