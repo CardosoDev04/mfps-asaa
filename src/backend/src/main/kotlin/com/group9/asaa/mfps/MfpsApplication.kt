@@ -15,7 +15,7 @@ import org.springframework.scheduling.annotation.EnableScheduling
 
 @SpringBootApplication(exclude = [DataSourceAutoConfiguration::class])
 @ComponentScan("com.group9.asaa")
-@PropertySource("classpath:secrets-dev.properties")
+@PropertySource("classpath:secrets-dev.properties", ignoreResourceNotFound = true)
 @EnableScheduling // added for scheduled outbox draining
 class MfpsApplication
 
