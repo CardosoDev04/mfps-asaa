@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_IMAGE_NAME: lowercase-image-name
-  PROJECT_NAME: ProjectName
-  GROUP_NUMBER: GroupNumber # I.e Group02
+  DOCKER_IMAGE_NAME: mfps
+  PROJECT_NAME: MFPS
+  GROUP_NUMBER: Group09 # I.e Group02
 
 jobs:
   clone-repository:
