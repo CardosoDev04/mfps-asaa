@@ -10,7 +10,7 @@ env:
   PACKAGE_REGISTRY_TO_USE: thmork
   DOCKER_IMAGE_NAME: mfps
   PROJECT_NAME: MFPS
-  GROUP_NUMBER: Group09 # I.e Group02
+  GROUP_NUMBER: Group09
 
 jobs:
   clone-repository:
