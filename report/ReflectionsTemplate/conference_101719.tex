@@ -17,6 +17,9 @@
 \usepackage{amsthm}
 %\usepackage[english]{babel}
 \usepackage{pifont} % checkmarks
+\usepackage{float} 
+\usepackage{caption}
+\usepackage{placeins}
 %\theoremstyle{definition}
 %\newtheorem{definition}{Definition}[section]
 
@@ -58,22 +61,22 @@
 %  \gdef\mycopyrightnotice{}% just in case
 %}
       
-\title{Group Report Template\\
+\title{Towards developing an autonomous Modular Furniture Production System (MFPS)\\
 }
 
 \author{
     \IEEEauthorblockN{
-        Student 1\IEEEauthorrefmark{1},
-        Student 2\IEEEauthorrefmark{1},
-        Student 3\IEEEauthorrefmark{1},
-        Student 4\IEEEauthorrefmark{1},
-        Student 5\IEEEauthorrefmark{1},
+        João R. Cardoso\IEEEauthorrefmark{1},
+        Yusuf Mohamoud Yusuf\IEEEauthorrefmark{1},
+        Marko Jakimenko\IEEEauthorrefmark{1},
+        Rahima Akter Munni\IEEEauthorrefmark{1}
     }
     \IEEEauthorblockA{
-        University of Southern Denmark, SDU Software Engineering, Odense, Denmark \\
-        Email: \IEEEauthorrefmark{1} \textnormal{\{student1,student2,student3,student4,student5\}}@mmmi.sdu.dk
+        \IEEEauthorrefmark{1}University of Southern Denmark, SDU Software Engineering, Odense, Denmark \\
+        Emails: \{jocar25, yuyus19, majak25, ramun25\}@student.sdu.dk
     }
 }
+
 
 %%%%
 
@@ -108,88 +111,247 @@
 \begin{abstract}
 %%%%%%%%%%%%%%%%%% Max 970 signs without space %%%%%%%%%%%%%%%%%%
 % Intro
+Industry~4.0 production systems rely on distributed software architectures to coordinate autonomous physical assets under strict performance constraints.
 
-% Gab
-    
-% Aim 
+% Gap
+Although reference architectures and formal verification techniques provide valuable design-time guidance, they often fail to capture implementation-level performance behavior, particularly in concurrent and event-driven systems.
+
+% Aim
+This work investigates whether a distributed software architecture for a Modular Furniture Production System (MFPS) can satisfy latency and throughput non-functional requirements under realistic operational conditions.
 
 % Method
+An event-driven, microservices-based architecture was designed following Industry~4.0 principles, formally verified using UPPAAL, and empirically evaluated through controlled experiments on a containerized implementation using Apache Kafka and simulated AGVs.
 
-% Results 
-
+% Results
+The results show that the initial design meets latency requirements under sequential load but fails under concurrent bulk ordering due to a service-layer concurrency bottleneck. After correcting this issue, the system consistently satisfies the latency requirement and exceeds the throughput requirement by a wide margin.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Keyword1, Keyword2, Keyword3, Keyword4, Keyword5
+modular furniture production, I4.0, event-driven architecture, software architecture, software analysis
 \end{IEEEkeywords}
 
 \section{Introduction and Motivation}
-%Introduction and motivate the problem
 
-The structure of the paper is as follows. 
-Section \ref{sec:problem} outlines the research question and the research approach. 
-%to analyze the research question and evaluate our results.
-Section \ref{sec:related_work} describes similar work in the field and how our contribution fits the field.
-Section \ref{sec:use_case} presents a production reconfiguration use case.
-The use case serves as input to specify a reconfigurability QA requirement in Section \ref{sec:qas}.
-Section \ref{sec:middleware_architecture} introduces the proposed reconfigurable middleware software architecture design.
-Section \ref{sec:evaluation} evaluates the proposed middleware on realistic equipment in the I4.0 lab and analyzes the results against the stated QA requirement.   
+Industry~4.0 production environments increasingly rely on distributed software systems to coordinate autonomous physical assets, such as machines and Autonomous Guided Vehicles (AGVs), under strict performance constraints. In such systems, software architecture plays a critical role in ensuring that functional behavior and non-functional requirements, including latency and throughput, are satisfied in realistic operational conditions. However, designing architectures that remain performant under concurrent load remains a significant challenge.
+
+Reference architectures such as RAMI~4.0 and the Industrial Internet Reference Architecture provide valuable conceptual guidance for structuring industrial cyber-physical systems. While these models emphasize modularity, interoperability, and scalability, they largely remain descriptive and do not prescribe concrete mechanisms for validating performance-related non-functional requirements at the implementation level. Formal verification techniques can help assess architectural designs early, but their effectiveness depends on the fidelity of the models and their ability to capture concurrency and resource contention.
+
+Motivated by these challenges, this study investigates the extent to which a distributed, event-driven software architecture for a Modular Furniture Production System (MFPS) can satisfy strict performance requirements when deployed and subjected to realistic workloads. In particular, we focus on confirmation latency between Assembly and Transportation subsystems and on transportation throughput under sustained load. By combining formal verification with empirical experimentation, this work aims to expose architectural and implementation-level bottlenecks that may not be visible during design-time analysis.
+
+The remainder of this paper is structured as follows. Section~\ref{sec:problem} presents the problem statement, research questions, and research approach. Section~\ref{sec:related_work} reviews related work and positions our contribution with respect to existing Industry~4.0 reference architectures and architectural paradigms. Section~\ref{sec:use_case} introduces the selected use case that motivates the evaluation scenario, and Section~\ref{sec:qas} defines the performance quality attribute scenarios used as measurable non-functional requirements. Section~\ref{sec:design}--\ref{sec:analysis} describe the architectural modelling and validation process, including design and analysis modelling, formal verification using UPPAAL, and empirical evaluation through controlled experiments. Finally, Section~\ref{sec:conclusion} concludes the paper by discussing the findings and outlining future work.
+
+  
 
 \section{Problem and Approach}
-
 \label{sec:problem}
+
 \emph{Problem.}
+The Modular Furniture Production System (MFPS) is an industrial-scale production system intended to automate the manufacturing of modular furniture for medium to large enterprises. The system is designed to operate in a fully automated fashion, relying on smart controllers and Autonomous Guided Vehicles (AGVs) to coordinate the production of different furniture variants. A key challenge of the MFPS is the integration of its distinct subsystems, namely the Assembly, Transportation, and Communication systems, which must collaborate reliably to request and deliver parts. The primary problem is to validate that this distributed architecture can satisfy specific non-functional performance requirements necessary for industrial applicability, such as maintaining low communication latency for order confirmation and achieving high order throughput under sustained load.
 
 \emph{Research questions:}
 \begin{enumerate}
-    \item  
-    \item 
+    \item \textbf{RQ1: Latency Compliance.} How performant is the interaction between the Assembly and Transportation subsystems as to satisfy a low amount of order confirmation latency?
+    \item \textbf{RQ2: Scalability and Concurrency.} Which architectural or implementation bottlenecks constrain system performance during concurrent bulk ordering, and how can these be addressed to support high scalability?
+    \item \textbf{RQ3: Transportation Throughput.} How does the transportation system perform throughput-wise under sustained load and varying transport durations?
 \end{enumerate}
 
 \emph{Approach.}
-The following steps are taken to answer this paper's research questions: 
+To address the research questions of this paper, we follow the steps listed below:
 \begin{enumerate}
-    \item 
+    \item \textbf{Scope Definition:} We restrict the analysis to three core subsystems (Assembly, Transportation, and Communication) in order to isolate and measure performance indicators related to throughput and communication delay.
+    \item \textbf{Feature Selection:} We choose the feature "Assembly system requests parts and assembles them" as the main end-to-end process for experimentation, since it requires participation from all three subsystems.
+    \item \textbf{Latency Experimentation (Exp 1):} We design an experiment to measure confirmation latency, evaluating both sequential ordering (R1) and concurrent bulk ordering (R2) in order to identify performance degradation under load.
+    \item \textbf{Bottleneck Analysis and Optimization:} After observing a catastrophic failure under concurrent load, we examine potential causes, determine that a misconfigured concurrency control structure is the underlying issue, and apply a fix to recover the required performance level.
+    \item \textbf{Throughput Evaluation (Exp 2):} We then conduct a second experiment to quantify the transportation system's overall throughput, expressed as Orders Per Minute, over a sustained 5-minute period under different transportation time constraints.
 \end{enumerate}
 
-
-\section{Related work}
+\section{Related Work}
 \label{sec:related_work}
-This Section addresses existing contributions by examining xxx in the I4.0 domain. 
-In total, x papers are investigated. 
 
-In \cite{Wan2019Reconfigurable}, experiences are elaborated on a three-layer architecture of a reconfigurable smart factory for drug packing in healthcare I4.0. 
+This section reviews reference architectures and architectural paradigms commonly used in Industry~4.0 systems, with a focus on distributed manufacturing, reconfigurability, and performance-oriented design. For each approach, we discuss how its principles relate to the architecture and evaluation performed in this work. While these architectures provide valuable conceptual foundations for smart factory systems, they often lack empirical validation of concrete non-functional requirements at the software implementation level, which is a central focus of this study.
 
-The paper \cite{Yazen2010Ontology} proposes an ontology agent-based architecture for inferring  new configurations to adapt to changes in manufacturing requirements and/or environment.
+The Reference Architectural Model Industry~4.0 (RAMI~4.0)~\cite{Schweichhart2016} is widely adopted as a conceptual framework for structuring industrial cyber-physical systems. RAMI~4.0 defines a layered architecture that separates concerns across asset integration, communication, information processing, and functional behavior. The MFPS architecture proposed in this work aligns with these principles by clearly separating physical transportation assets (AGVs), communication infrastructure (Kafka-based messaging), and functional subsystems (Assembly and Transportation services). However, RAMI~4.0 remains largely descriptive and does not prescribe concrete mechanisms for managing concurrency, latency, or throughput. This work extends beyond the RAMI~4.0 abstraction by implementing these layers in software and empirically evaluating their interaction under realistic load conditions.
 
-In \cite{Leitao2016Specification,Angione2017Integration} an architecture for a reconfigurable production system is specified.
-Two objectives for reconfiguration and how they can be reached are described.
+The Industrial Internet Reference Architecture (IIRA)~\cite{IIC_IIRA_2022} similarly addresses large-scale industrial systems by defining architectural viewpoints that emphasize interoperability, scalability, and performance. The performance concerns highlighted by IIRA directly correspond to the non-functional requirements evaluated in this work, namely confirmation latency and transportation throughput. While IIRA identifies these qualities as first-class architectural concerns, it does not provide guidance on how to validate them experimentally. In contrast, this work operationalizes these concerns by defining measurable quality attribute scenarios, applying formal verification at design time, and validating the implemented architecture through controlled experimentation.
 
-Several papers \cite{Koren1999Reconfigurable,Koren2010Design,Bortolini2018Reconfigurable} describe reconfigurable manufacturing systems that are cost-effective and responsive to market changes.
+Event-driven architectures~\cite{Schulte2006EDA,Stopford2018Designing} are frequently adopted in Industry~4.0 systems to support loose coupling and asynchronous communication between distributed components. The MFPS system follows this paradigm by relying on event streams to propagate order requests, confirmations, and state transitions between subsystems. Although event-driven designs are generally associated with scalability, the results of our experiments demonstrate that asynchronous communication alone is insufficient to guarantee low latency under concurrent load. The observed performance degradation under bulk ordering highlights the importance of correct concurrency control within event-processing services, an aspect that is often abstracted away in high-level EDA descriptions.
 
-All contributions provide valuable knowledge about reconfiguration but lack a study of the software architecture perspective that specifies a quantifiable reconfigurability architectural requirement, a software architecture that adopts the architectural requirements, and evaluates the architectural requirement. 
+Microservices-based architectures~\cite{Newman2015Building} have also gained traction in industrial software systems due to their support for independent deployment, scalability, and fault isolation. The Assembly, Communication, and Transportation subsystems in the proposed architecture are implemented as independent services that interact asynchronously. While this decomposition improves modularity and evolvability, the experimental results show that local implementation decisions, such as service-level concurrency limits, can have significant system-wide performance implications. This work provides empirical evidence of how microservices-based designs must be carefully evaluated to ensure compliance with strict industrial latency requirements.
+
+Finally, reference architectures for reconfigurable manufacturing systems emphasize modularity, adaptability, and responsiveness to changing production demands. These approaches primarily address physical system reconfiguration and high-level control strategies. In contrast, this work focuses on reconfigurability and scalability at the software architecture level, specifically in the context of dynamic order generation, concurrent processing, and throughput guarantees. By treating performance as a quantifiable architectural concern, the proposed approach complements existing reconfigurable manufacturing research with a software-centric perspective.
+
+In summary, this work adopts principles from established Industry~4.0 reference architectures while addressing a gap in existing literature by providing a concrete implementation and empirical evaluation of performance-related non-functional requirements. By bridging the gap between reference models, formal verification, and experimental validation, this study offers practical insight into the architectural trade-offs involved in building performant and reconfigurable Industry~4.0 systems.
 
 
 \section{Use Case}
 \label{sec:use_case}
-This Section introduces the use cases.
+
+The system is evaluated using a key feature that requires coordinated collaboration among three main subsystems: the Transportation System, the Communication System, and the Assembly System. This feature, denoted as F1, is specifically chosen because it is well suited to evaluating performance-related metrics such as throughput and communication delay.
+
+\subsection{F1: Assembly Parts Request and Assembly}
+This feature describes the complete sequence from issuing a request to completing the assembly preparation phase:
+\begin{itemize}
+    \item \textbf{Assembly system requests parts for assembly:} The sequence begins when the Assembly System issues an order for the required components.
+    \item \textbf{Receives them:} The Communication System is responsible for routing the order to the Transportation System. The Transportation System then handles fulfilment of the order, which includes steps such as selecting an AGV, picking up the parts, and delivering them.
+    \item \textbf{Assembles:} Once the Assembly System receives confirmation that the parts have arrived or that the order has been fulfilled, the assembly process can start.
+\end{itemize}
 
 \section{Quality Attribute Scenario}
 \label{sec:qas}
-This Section introduces the specified x QASes.
-The QASes are developed based on the use case.
+This Section presents the defined performance Quality Attribute Scenarios (QASes). The QASes are derived from the use case (F1: Assembly Parts Request and Assembly) in order to quantify the non-functional requirements associated with our chosen quality attribute: \textbf{Performance}.
+
+\subsection{QAS 1: Confirmation Latency}
+This scenario targets the communication delay experienced by the Assembly System when requesting parts and ensures that the system adheres to the required low-latency constraint.
+
+\begin{description}[font=\normalfont\bfseries]
+    \item[Quality Attribute] Performance (Latency)
+    \item[Source] Assembly System
+    \item[Stimulus] The Assembly System submits an order (or a bulk request) for parts to the Transportation System.
+    \item[Artifact] The Transportation System, mediated via the Communication System, including its order processing pipeline and concurrency control mechanisms.
+    \item[Environment] Normal operating conditions using the existing Dockerized environment (React frontend, Kotlin backend, Kafka messaging) with multiple AGVs available.
+    \item[Response Measure] The elapsed time in milliseconds from when the Assembly System places the order until it receives a confirmation status (Achieved Confirmation Latency).
+    \item[Response] The average confirmation latency ($\mu_{\text{confirmation\_latency}}$) must be less than or equal to 2000 ms.
+\end{description}
+
+\subsection{QAS 2: Transportation Throughput}
+This scenario focuses on the ability of the Transportation System to process a continuous, heavy production workload over a specified duration.
+
+\begin{description}[font=\normalfont\bfseries]
+    \item[Quality Attribute] Performance (Throughput)
+    \item[Source] Frontend Order Creation Dashboard
+    \item[Stimulus] A continuous stream of bulk orders (for example, batches of 10 orders) is generated and repeatedly sent to the system for a total of 5 minutes.
+    \item[Artifact] The Transportation System, including AGV scheduling and order queuing mechanisms.
+    \item[Environment] Normal operating conditions that emulate sustained industrial load.
+    \item[Response Measure] The total number of orders completed and successfully processed during the 5-minute interval, reported as Orders Per Minute (OPM) and Orders Per Second (OPS).
+    \item[Response] The system must process at least 30 orders during the 5-minute period.
+\end{description}
 
 % Description of the overall architecture designs
 % Argue for tactics used to archieve the QASes
 % Discuss the trade-offs
 
 \section{Design and Analysis Modelling}
-\label{sec:design_and_analysis_modelling}
-Design and analysis modelling.
+After specifying the requirements and quality attribute scenarios (QASes) for the components we intended to implement, we proceeded with the analysis and design modelling of the architecture to increase the likelihood that the final implementation would satisfy these objectives.
+
+\subsection{Analysis Modelling}
+For the analysis modelling of our system, we first constructed an analysis-level diagram that captures the high-level responsibilities of each subsystem and the data flow between them. This served to confirm that all system requirements were covered. The diagram is shown in Figure~\ref{appendix:analysis} in the appendix.
+
+Based on this analysis, we derived the following high-level structure:
+
+\begin{itemize}
+    \item \textbf{Assembly System}
+
+    This subsystem is tasked with issuing assembly orders and assembling parts once the necessary components have been delivered. To support this, it must provide the following functions:
+
+    \begin{itemize}
+        \item \textbf{CreateOrder}: Creates an order for parts that must be transported from the warehouse to the assembly system.
+        \item \textbf{SendOrder}: Sends the created order to the transportation system so it can be processed and fulfilled.
+        \item \textbf{ReceiveConfirmation}: Receives a confirmation from the transportation system indicating that the order will be handled.
+        \item \textbf{NotifyStatus}: Reports the current system status based on the active state in the state machine.
+    \end{itemize}
+
+    \item \textbf{Communication System}
+
+    This subsystem brokers messages between the different subsystems using Kafka. Its main function is to act as an intermediary, transforming subsystem-specific data structures into generic message formats and coordinating their routing throughout the system.
+
+    \begin{itemize}
+        \item \textbf{ReceiveMessage}: Accepts a message from a sender that contains information to be forwarded to the appropriate recipient.
+        \item \textbf{ConnectMessages}: Associates the incoming message with its target recipient.
+        \item \textbf{SendMessage}: Delivers the message to the intended recipient.
+        \item \textbf{NotifyStatus}: Reports the current system status based on the active state in the state machine.
+    \end{itemize}
+
+    \item \textbf{Transportation System}
+
+    This subsystem is responsible for moving parts from the warehouse to their destination subsystems using Automated Guided Vehicles (AGVs), thereby automating the delivery workflow. It receives transport orders and must process them accordingly.
+
+    \begin{itemize}
+        \item \textbf{ReceiveOrder}: Receives a transport order that specifies the required parts and their pickup and delivery locations.
+        \item \textbf{FulfillOrder}: Carries out the complete transport order, including confirmation, pickup, delivery, and return to the station.
+        \item \textbf{NotifyStatus}: Reports the current system status based on the active state in the state machine.
+    \end{itemize}
+
+    After completing the analysis phase for our system, we then refined this view using a design-level diagram that captures lower-level structural details of how the initial analysis overview can be realized in software. The resulting design-level diagram is shown in Figure \ref{appendix:design} and led to the following considerations for each subsystem:
+
+    \begin{itemize}
+        \item \textbf{Assembly System}
+        This system is modelled as a state machine that enables controlled state transitions, supported by an internal queue data structure that allows the creation and communication of multiple orders in bulk when required.
+        \begin{itemize}
+        \item \textbf{CreateOrder}: The order creation process involves instantiating an object that represents an order and enqueuing it in the queue.
+        
+        \item \textbf{SendOrder}: This component is responsible for handling the queue. It uses the \textit{runOne()} method to dequeue a single order object and triggers the internal State Machine to transition between states via the \textit{run()} method. The component then forwards the \textit{AssemblyTransportOrder} to the communication layer.
+        
+        \item \textbf{ReceiveConfirmation}: This operation manages the asynchronous nature of transport confirmation. It uses a signal-driven strategy in which \textit{awaitConfirmation()} suspends execution until a specific signal is received through \textit{confirmOrder()}, indicating that the Transportation System has accepted the request.
+        
+        \item \textbf{NotifyStatus}: In contrast to the simple status reporting in the analysis phase, the design implements an event streaming approach. The \textit{observeEvents()} method monitors the State Machine, while \textit{streamEvents()} and \textit{log()} ensure that status transitions are serialized and emitted for external monitoring.
+    \end{itemize}
+
+    \item \textbf{Communication System} \label{sec:middleware_architecture}
+
+    The Communication System is designed to decouple the Assembly and Transportation systems using a message-brokering pattern. It interacts directly with Kafka topics (Inbound and Outbound) to control data movement.
+
+    \begin{itemize}
+        \item \textbf{ReceiveMessage}: This component listens to incoming Kafka streams. The \textit{onReceive()} method is invoked when a message arrives, and \textit{accept()} validates the payload before it is passed to the internal logic.
+        \item \textbf{ConnectMessage}: This element implements the routing logic. The \textit{process()} method interprets the incoming \textit{CommunicationMessage}, and \textit{connect()} establishes the appropriate link between sender and recipient, encapsulating the data in an \textit{EventEnvelope}.
+        \item \textbf{SendMessage}: This part is in charge of sending processed messages. It uses \textit{begin()} to set up the transaction, \textit{sending()} to deliver the payload to the corresponding Kafka Outbound Topic, and \textit{save()} to store the transaction record if needed.
+        \item \textbf{NotifyStatus}: This element maintains the subscription state of the communication channels. The \textit{subscribe()} method keeps listeners active, and \textit{notified()} confirms that status updates have been successfully distributed through the broker.
+    \end{itemize}
+
+    \item \textbf{Transportation System}
+
+    The Transportation System design includes concurrency control mechanisms to handle the physical constraints of the AGVs (Automated Guided Vehicles).
+
+    \begin{itemize}
+        \item \textbf{ReceiveOrder}: This element listens for \textit{CommunicationMessage} instances from the broker. The \textit{onOutbound()} method is called when a transport request is observed, and \textit{readValue()} extracts the transport requirements from the message payload.
+        \item \textbf{FulfillOrder}: This is the main execution component. A \textbf{Concurrency Gate} is incorporated to regulate the use of limited resources. The \textit{acquireAGV()} method requests access to a vehicle, \textit{delay()} models the travel time, and the \textit{run()} method coordinates these actions with the internal State Machine.
+        \item \textbf{NotifyStatus}: As with the Assembly System, this component publishes the current location or state of the AGVs. It uses \textit{tryEmit()} to attempt to broadcast status updates without blocking the core transport logic, and \textit{stream()} to keep a steady stream of updates available to the Dashboard.
+    \end{itemize}
+
+    \item \textbf{Dashboard}
+
+    This component is introduced to offer a visual representation of the system state in real time by consuming events streamed from the back-end.
+
+    \begin{itemize}
+        \item \textbf{Event Consumption}: The dashboard operates as a sink for the \textit{Event} stream generated by the other subsystems.
+        \item \textbf{Visualization Logic}: It provides operations such as \textit{createOne()} to generate and trigger the visualization of single order updates and \textit{createBulk()} to perform the same task for bulk orders, enabling real-time observation of the overall assembly and transport workflow.
+    \end{itemize}
+
+\end{itemize}
+\end{itemize}
+
+After developing a more detailed understanding of the system architecture from a design perspective, we then created behavioural state diagrams, such as the one in Figure \ref{appendix:state-diagram}, to formalize the intended state transitions of the system state machines. In the next section, we explain how we formally verified these preliminary behaviour models.
 
 \section{Formal verification and validation}
 \label{sec:formal_v_and_v}
-Formal verification and validation of system(s).
+
+To verify and validate the behaviour previously defined for the relevant parts of the overall system, we employed UPAAL \cite{UPPAAL} to translate our diagrams into an automaton model and to execute verification queries on that model.
+
+In order to assess potential concerns with our initial design and after modelling and connecting the UPPAAL templates we developed verification queries to run against the overall system. Interestingly, validating our system using these surfaced considerations we skipped over before such as: adding intermediate states for value verification, adding guards and states for timeouts and other errors and invariants and other unconsidered guards.
+
+Below are the queries we developed given our functional and non-functional requirements described in earlier sections as well as the result we've obtained from them:
+
+\begin{itemize}
+
+    \item {\textit{A[] not deadlock}}
+    \begin{itemize}
+        \item \textbf{Purpose}: Ensures that no path in the system globally results in a deadlock, which would lead to complete system stoppage.
+        \item \textbf{Result}: This property was satisfied by our system.
+    \end{itemize}
+
+    \item {\textit{A[] (assembly.ReceivingConfirmation imply assembly.confirmation\_clock $\leq 2$)}}
+    \begin{itemize}
+        \item \textbf{Purpose}: Ensures that a confirmation response requested from Assembly can only take at most 2 time units.
+        \item \textbf{Result}: This property was satisfied by our system.
+    \end{itemize}
+
+    \item {\textit{A[] (global\_clock $\geq $300 imply assembly\_orders\_sent $\geq $30)}}
+    \begin{itemize}
+        \item \textbf{Purpose}: Ensures that for all paths, if the global clock reaches 300 time units (representing 5 minutes), the system has processed at least 30 orders.
+        \item \textbf{Result}: This property was not satisfied by our system. The reason remains unclear from a UPPAAL perspective, since later sections show that the implemented system does satisfy this requirement.
+    \end{itemize}
+
+\end{itemize}
+
 
 
 \section{Evaluation}
@@ -197,35 +359,325 @@ Formal verification and validation of system(s).
 
 % Empirical evaluation
 This Section describes the evaluation of the proposed design.
-Section \ref{sec:design} introduces the design of the experiment to evaluate the system. 
-Section \ref{sec:measurements} identifies the measurements in the system for the experiment.
-Section \ref{sec:pilot_test} describes the pilot test used to compute the number of replication in the actual evaluation. 
-Section \ref{sec:analysis} presents the analysis of the results from the experiment. 
+Section \ref{sec:design} outlines the design of the experiment used to evaluate the system. 
+Section \ref{sec:measurements} identifies the measurements in the system that are used in the experiment.
+Section \ref{sec:pilot_test} presents the pilot test that is used to calculate the number of replications in the actual evaluation. 
+Section \ref{sec:analysis} reports the analysis of the experimental results. 
 
 \subsection{Experiment design}
 \label{sec:design}
 
+Two experiments were conducted in total. Experiment~1 consisted of two sub-experiments, while Experiment~2 consisted of a single experiment. Experiment~1 focused on confirmation latency, whereas Experiment~2 focused on transportation throughput. The design of Experiment~1 is described first, followed by Experiment~2.
+
+\textbf{Experiment 1 hypotheses.}
+Two hypotheses were defined for Experiment~1: 
+$H_0$: confirmation latency $\leq 2000$ ms, and 
+$H_1$: confirmation latency $\geq 2000$ ms. 
+To evaluate these hypotheses, the workload was fixed at 30 transport orders per run, where each run was considered a single replication unit.
+
+\textbf{Experiment 1} (See Figure \ref{fig:exp1stimulus-diag}) evaluated the non-functional requirement: \textit{The assembly system should wait at most 2 seconds for a confirmation from the transportation system after placing an order}. Both sub-experiments addressed this requirement. The first sub-experiment (R1) used sequential ordering, where each order was sent only after the previous one completed. The second sub-experiment (R2) used bulk ordering, in which 30 orders were submitted concurrently as a single request.
+
+The dependent variable in Experiment~1 was the observed confirmation latency. The independent variables were the number of AGVs, the number of orders per request, and the confirmation timeout.
+
+\textbf{Experiment 2 hypotheses.}
+Two hypotheses were defined for Experiment~2:
+$H_0$: the system processes at least 30 transport orders within 5 minutes, and
+$H_1$: the system processes fewer than 30 transport orders within 5 minutes.
+
+\textbf{Experiment 2} (see Figure~\ref{fig:exp2stimulus-diag}) evaluated the non-functional requirement: \textit{The assembly system must be able to send, and the transportation system must be able to process, a minimum of 30 order requests within 5 minutes during peak operation}. In this experiment, the system was automatically loaded with batches of 10 orders submitted in bulk. Each batch was issued only after the previous batch had completed, over a total duration of 5 minutes. The dependent variables were the total number of processed orders, the average number of orders processed per minute, and the number of errors observed during the experiment.
+
+\textbf{Environment setup}
+
+To evaluate both hypotheses, an experimental setup was created with the following components: a React frontend dashboard acting as the source of orders, a Kotlin and Spring Boot backend responsible for receiving orders, and an Apache Kafka cluster for message handling. The transportation process was simulated by the transportation system. All components were deployed in separate Docker containers on a single physical host and connected through the same network.
+
+
 \subsection{Measurements}
 \label{sec:measurements}
+
+The measurement procedures differed between the two experiments due to the nature of the evaluated non-functional requirements.
+
+\textbf{Experiment 1.}
+For Experiment~1, measurements were collected automatically by a dedicated logging service. This service recorded timestamps with millisecond precision in the database whenever relevant state changes occurred in each system. Specifically, timestamps were captured when an order was sent by the assembly system, when a confirmation was received from the transportation system, and when the assembly process resumed. The confirmation latency was computed as the elapsed time between the order submission and the receipt of the corresponding confirmation message.
+
+This automated approach ensured consistent and precise measurement of latency across all runs, while minimizing the risk of human error.
+
+\textbf{Experiment 2.}
+For Experiment~2, the frontend dashboard was configured to automatically submit transport order requests for a fixed duration of 5 minutes. During this period, orders were sent in batches according to the experiment configuration. After the 5-minute interval elapsed, the total number of successfully processed orders was determined through manual inspection of the system state and recorded results.
+
+These measurements were used to compute the total throughput and the average number of processed orders per minute, which were then compared against the defined non-functional requirement.
 
 \subsection{Pilot test}
 \label{sec:pilot_test}
 
+For both experiments, several pilot tests were executed multiple times. The purpose of these pilot tests was to verify the correct end-to-end message flow, the accuracy of timestamp logging, and the stability of the Docker-based deployment. No issues were identified in the back-end or messaging infrastructure. However, limitations were observed in the frontend dashboard.
+
+Adjustments were required to improve how test results were presented to the researchers. Specifically, the frontend was modified to display results in a clearer and more structured manner, allowing experiments to be monitored in real time and enabling immediate detection of errors or unexpected behaviour. After these improvements, the pilot tests were repeated and no anomalies were observed.
+
+All experimental results were successfully recorded in the database with millisecond-level precision.
+
+
 \subsection{Analysis}
 \label{sec:analysis}
+
+This section analyzes the results obtained from both experiments and evaluates them against the defined non-functional requirements.
+
+\textbf{Experiment 1: Confirmation latency (NFR0).}
+
+\textbf{R1: Sequential ordering.} (Results in Table \ref{tab:exp1r1})
+Under sequential ordering with three AGVs, the system exhibited stable and consistently low confirmation latency. The mean confirmation latency was 1378.77 ms with a standard deviation of 73.19 ms, indicating low variability across runs. All observed values remained well below the 2000 ms threshold, including the maximum latency of 1483 ms and the 95th percentile of 1468.35 ms.
+
+The distribution of latencies was symmetric, with the median closely matching the mean. No timeouts were observed, and none of the 30 orders exceeded the required limit. The 95\% confidence interval for the mean, [1351.44 ms, 1406.10 ms], lies entirely below the threshold, providing strong statistical evidence that the system satisfies NFR0 under sequential load conditions. These results confirm that, when orders are processed one at a time, the system meets the confirmation latency requirement with a substantial safety margin of approximately 500 to 600 ms.
+
+\textbf{R2: Bulk ordering (baseline).} (Results in Table \ref{tab:exp1r2.1})
+When the same system configuration was subjected to bulk ordering, confirmation latency degraded severely. In this scenario, 30 orders were submitted concurrently, resulting in a mean confirmation latency of 8043.57 ms and a median of 10012 ms. Latency variability increased significantly, with a standard deviation of 3044.73 ms.
+
+A total of 27 out of 30 orders, corresponding to 90\% of the dataset, exceeded the 2000 ms requirement. The 95th percentile reached 10033 ms, approaching the configured confirmation timeout. The 95\% confidence interval for the mean lies entirely above the requirement, providing strong evidence that the system does not satisfy NFR0 under bulk-load conditions. These results indicate a severe bottleneck when handling concurrent confirmation requests.
+
+\textbf{Investigation of bulk-load degradation.}
+To identify the cause of the observed degradation, several independent variables were adjusted individually. Increasing the confirmation timeout and enlarging the AGV pool yielded limited or inconsistent improvements. Increasing the AGV pool from three to ten reduced the mean latency to 3700.13 ms and lowered the violation rate to 66.7\%, but the system still failed to meet NFR0.
+
+Further inspection of the concurrency model revealed that a semaphore in the transportation service limited concurrent processing to a number of permits equal to the AGV pool size. This configuration effectively serialized confirmation handling under high load. After increasing the semaphore permit count to 40, confirmation latency improved dramatically.
+
+With the revised semaphore (Results in Table \ref{tab:exp1r2.2}) configuration, bulk ordering achieved a mean confirmation latency of 1393.93 ms and a 95th percentile of 1527.65 ms. No orders exceeded the 2000 ms threshold, and the 95\% confidence interval for the mean lay entirely below the requirement. Similar results were observed under sequential ordering with the same semaphore configuration. These findings demonstrate that service-layer concurrency, rather than AGV availability, was the primary limiting factor for confirmation latency.
+
+\textbf{Conclusion for Experiment 1.}
+Experiment 1 shows that the system satisfies NFR0 under both sequential and bulk ordering once service-layer concurrency constraints are properly configured. Semaphore contention in the transportation service was identified as the dominant cause of latency violations under concurrent load, and correcting this issue restored consistent real-time responsiveness.
+
+\textbf{Experiment 2: Throughput capacity (NFR1).} (Results in Table \ref{tab:exp2.1})
+
+Experiment 2 evaluated whether the system could process at least 30 orders within a continuous 5-minute window. With three AGVs, a semaphore permit count of 40, and simulated transport times of 1 to 2 seconds, the system completed 330 orders within the allotted time. This corresponds to an average throughput of 66 orders per minute, exceeding the requirement by a factor of eleven.
+
+No timeouts, failures, or stalled batches were observed, and system behavior remained stable throughout the experiment. Treating order completions as a Poisson process yields a 95\% confidence interval of approximately 60 to 72.6 orders per minute, confirming that even conservative throughput estimates exceed the requirement by a wide margin.
+
+To assess the impact of physical transportation latency on throughput, the experiment was repeated with simulated, but more realistic, AGV travel times increased to 20 to 30 seconds. In this configuration, the system completed 90 orders within 5 minutes, corresponding to an average throughput of 18 orders per minute. Although this represents a substantial reduction relative to the fast-transport scenario, the system still exceeded the requirement by a factor of three. No instability or incomplete orders were observed.
+
+\textbf{Conclusion for Experiment 2.}
+The results demonstrate that the system comfortably satisfies NFR1 under both low and high transportation latency conditions. While increased AGV travel time predictably reduces throughput, the system maintains stable operation and sufficient processing capacity. Under the tested configurations, transportation time emerges as the dominant throughput-limiting factor, while service-layer concurrency remains sufficient to sustain continuous operation.
+
 
 
 \section{Conclusion}
 \label{sec:conclusion}
-Conclusion of the report, discussion and relevant future work.
+
+This section summarizes the results obtained in this work and discusses their implications for the design and evaluation of the system. It also highlights the main lessons learned during development and outlines directions for future work. Section~A presents the discussion of findings, while Section~B describes opportunities for future improvements and extensions.
+
 
 \subsection{Discussion}
 \label{sec:Discussion}
 
-\subsection{Future work}
-\label{sec:future_work}
+In light of the results obtained from the first experiment, and in response to RQ1 and RQ2, we conclude that the initial implementation of the MFPS system was able to satisfy the defined latency requirements with high confidence only under an optimal operating scenario. Specifically, when orders were processed sequentially and no concurrent requests were present, the system consistently met the latency constraints. However, this implementation suffered from a critical flaw in concurrency management, which became evident when the system was subjected to concurrent ordering. Under these conditions, the system failed to meet the latency requirements by a wide margin.
+
+This outcome highlights an important aspect of the architectural design process. A fundamental concurrency assumption was initially overlooked and only became apparent during experimental evaluation. As a result, the first implementation was not suitable for a distributed factory environment, where orders may originate from multiple sources simultaneously and must be handled concurrently.
+
+The findings also emphasize the importance of empirical evaluation in the architectural process. Although formal verification suggested that the latency requirement was satisfied, limitations inherent to the verification model prevented this issue from being detected at the implementation level. Consequently, the evaluation of the deployed system proved essential for identifying this critical concurrency flaw.
+
+After addressing this core issue, the final implementation operates successfully under the functional and non-functional requirements imposed by the system. Based on the experimental evaluation, we consider the solution feasible for deployment in a production environment.
+
+In response to RQ3, and based on the results of the second experiment, we conclude that the limitations predicted by formal verification regarding the system’s ability to process the required number of orders within a 5-minute window were not confirmed through empirical evaluation. In practice, the system was able to meet the throughput requirement and surpass it with a substantial margin.
+
+This discrepancy is primarily attributed to inaccuracies in the modeling of the UPPAAL automata for the transportation system. As the formal models were developed in parallel with the system architecture, incomplete understanding and modeling errors likely affected the verification results and led to overly conservative conclusions. These findings highlight the challenges of accurately modeling complex, concurrent systems and reinforce the importance of complementing formal verification with empirical experimentation
+
+In conclusion, the primary lesson derived from the development and evaluation of this system is that the architectural process must be viewed as a cohesive whole composed of multiple equally important stages. No single activity within this process, whether architectural design, formal verification, or empirical evaluation, can be considered authoritative in isolation. Results produced at one stage do not invalidate the need for validation at others, nor do they guarantee correctness at the implementation level.
+
+This work demonstrates that confidence in a software architecture can only be achieved by systematically progressing through all phases of the architectural lifecycle. Formal models provide valuable early insights and help identify potential design flaws, but they are inherently abstract and may fail to capture critical implementation details, particularly in systems involving concurrency and distributed execution. Empirical experimentation and performance evaluation are therefore essential to validate assumptions, uncover hidden bottlenecks, and confirm that both functional and non-functional requirements are satisfied under realistic operating conditions.
+
+Ultimately, architectural soundness emerges from the continuous alignment of design decisions, formal reasoning, implementation choices, and experimental validation. Only by treating these stages as complementary rather than substitutive can an architecture be developed with sufficient confidence to support deployment in production environments.
+
+\subsection{Future Work}
+\label{sec:FutureWork}
+
+Several directions for future work emerge from the results and limitations of this study. First, the evaluation focused on a fixed set of subsystems and a limited number of AGVs operating under simulated transport conditions. Extending the experimental setup to include additional production stations, heterogeneous AGVs, and physical deployment in a real factory environment would provide further insight into the scalability and robustness of the proposed architecture.
+
+Second, while this work identified and resolved a critical concurrency bottleneck at the service layer, more advanced resource management and scheduling strategies could be explored. These include adaptive concurrency control, dynamic semaphore sizing, or priority-based order handling to better accommodate fluctuating production demands.
+
+Third, the discrepancy between formal verification results and empirical findings highlights the need for improved modeling techniques. Future work could investigate richer UPPAAL models that more accurately capture service-level concurrency, queueing behavior, and resource contention.
+
+Finally, the MFPS architecture could be extended to support additional quality attributes beyond performance, such as availability or security. Evaluating trade-offs between multiple quality attributes would further strengthen the architectural assessment and contribute to the development of more resilient Industry~4.0 production systems.
+
+
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
+\clearpage
+\appendices
+
+% -------------------- APPENDIX A: TABLES --------------------
+\section{Additional Tables}
+
+% Pack two small tables side-by-side
+\vspace{-0.5em}
+
+\noindent
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\captionof{table}{Experiment 1, R1 (Sequential, 3 AGVs) Results}
+\label{tab:exp1r1}
+\begin{tabular}{l r}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Mean confirmation latency & 1378.77 ms \\
+Median & 1391.5 ms \\
+Standard deviation & 73.19 ms \\
+Minimum & 1144 ms \\
+Maximum & 1483 ms \\
+25th percentile (P25) & 1344 ms \\
+75th percentile (P75) & 1438.75 ms \\
+95th percentile (P95) & 1468.35 ms \\
+\hline
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\captionof{table}{Experiment 1, R2 (Bulk Ordering, 3 AGVs) Results}
+\label{tab:exp1r2.1}
+\begin{tabular}{l r}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Mean & 8043.57 ms \\
+Median & 10012 ms \\
+Standard deviation & 3044.73 ms \\
+Minimum & 1433 ms \\
+Maximum & 10034 ms \\
+25th percentile (P25) & 6373.5 ms \\
+75th percentile (P75) & 10025 ms \\
+95th percentile (P95) & 10033 ms \\
+Count & 30 orders \\
+Count $>$ 2000 ms & 27 orders \\
+Percentage $>$ 2000 ms & 90\% \\
+\hline
+\end{tabular}
+\end{minipage}
+
+\vspace{1.0em}
+
+\noindent
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\captionof{table}{Experiment 1, R2 (Bulk Ordering Concurrency Fixed, 3 AGVs) Results}
+\label{tab:exp1r2.2}
+\begin{tabular}{l r}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Mean & 1393.93 ms \\
+Median & 1405.5 ms \\
+Standard deviation & 101.82 ms \\
+Minimum & 1144 ms \\
+Maximum & 1556 ms \\
+25th percentile (P25) & 1356.75 ms \\
+75th percentile (P75) & 1465.0 ms \\
+95th percentile (P95) & 1527.65 ms \\
+Count & 30 orders \\
+\# $>$ 2000 ms & 0 \\
+\% $>$ 2000 ms & 0\% \\
+Timeouts & None \\
+\hline
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\captionof{table}{Experiment 2 Results: Transportation Time Between 1--2 Seconds}
+\label{tab:exp2.1}
+\begin{tabular}{l r}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Total orders completed & 330 \\
+Run duration & 5 minutes (300 seconds) \\
+Orders per minute (OPM) & 66 OPM \\
+Orders per second (OPS) & 1.1 OPS \\
+Peak 60-second throughput & $\approx$70--75 orders \\
+Timeouts & 0 \\
+Failed orders & 0 \\
+Stalled batches & None observed \\
+Final order states & 100\% completed \\
+\hline
+\end{tabular}
+\end{minipage}
+
+\vspace{1.0em}
+
+\noindent
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\captionof{table}{Experiment 2 Results: Transportation Time Between 20--30 Seconds}
+\label{tab:exp2.2}
+\begin{tabular}{l r}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Total orders completed & 90 \\
+Run duration & 300 seconds \\
+Orders per minute (OPM) & 18 OPM \\
+Orders per second (OPS) & 0.30 OPS \\
+Peak 60-second throughput & $\approx$20--22 orders \\
+Timeouts & 0 \\
+Failed orders & 0 \\
+Stalled batches & None \\
+Final states & 100\% completed \\
+\hline
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\captionof{table}{Contribution Table}
+\label{tab:contrib}
+\begin{tabular}{|c|p{6.2cm}|}
+\hline
+\textbf{Name} & \textbf{Contribution} \\ \hline
+João R. Cardoso & Project Lead; Brainstorming; Design; UPPAAL; Implementation \\ \hline
+Yusuf Mohamoud Yusuf & Brainstorming; Design; UPPAAL; Implementation \\ \hline
+Marko Jakimenko & Brainstorming; Design; UPPAAL; Implementation \\ \hline
+Rahima Munni & Brainstorming; Design; UPPAAL; Implementation \\ \hline
+\end{tabular}
+\end{minipage}
+
+% Ensure all tables are flushed before starting figures
+\FloatBarrier
+
+% -------------------- APPENDIX B: FIGURES --------------------
+\section{Additional Figures}
+
+% Let figures float; avoid clearpage between them.
+% Use figure* for consistent two-column width in IEEEtran.
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/analysis.png}
+    \caption{System analysis diagram.}
+    \label{appendix:analysis}
+\end{figure*}
+
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/design.png}
+    \caption{Detailed system design diagram.}
+    \label{appendix:design}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{Experiment 2.png}
+\caption{Experiment 2 stimulus and results overview: Transportation throughput.}
+\label{fig:exp2stimulus-diag}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{ReflectionsTemplate/figures/exp1.png}
+\caption{Experiment 1 stimulus and results overview: Confirmation latency.}
+\label{fig:exp1stimulus-diag}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{ReflectionsTemplate/figures/use-case-diagram.png}
+\caption{Use case diagram.}
+\label{fig:use-case-diagram}
+\end{figure*}
+
+\FloatBarrier
+
 \vspace{12pt}
 \end{document}
