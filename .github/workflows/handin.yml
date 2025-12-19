@@ -120,21 +120,18 @@ jobs:
         run: |
           mkdir -p handin/images
 
-          # Figure out the local image names created by compose
-          BACKEND_IMAGE="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'backend:latest$' | head -n 1 || true)"
-          DASHBOARD_IMAGE="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'dashboard:latest$' | head -n 1 || true)"
+          # (optional) show images so you can debug
+          docker images
 
-          echo "Backend image: $BACKEND_IMAGE"
-          echo "Dashboard image: $DASHBOARD_IMAGE"
+          # Save by service image IDs from compose (reliable)
+          BACKEND_ID="$(docker compose -f docker-compose.yml images -q backend)"
+          DASHBOARD_ID="$(docker compose -f docker-compose.yml images -q dashboard)"
 
-          # Fallback: use compose to list images if grep didn't match
-          if [ -z "$BACKEND_IMAGE" ] || [ -z "$DASHBOARD_IMAGE" ]; then
-            docker compose -f docker-compose.yml images
-          fi
+          echo "Backend image id: $BACKEND_ID"
+          echo "Dashboard image id: $DASHBOARD_ID"
 
-          # Save by service name from compose (more reliable)
-          docker save "$(docker compose -f docker-compose.yml images -q backend)" -o handin/images/backend-image.tar || true
-          docker save "$(docker compose -f docker-compose.yml images -q dashboard)" -o handin/images/dashboard-image.tar || true
+          docker save -o handin/images/backend-image.tar "$BACKEND_ID"
+          docker save -o handin/images/dashboard-image.tar "$DASHBOARD_ID"
 
       - name: Upload Docker images artifact
         uses: actions/upload-artifact@v4
