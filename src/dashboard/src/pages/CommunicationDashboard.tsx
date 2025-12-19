@@ -59,7 +59,7 @@ export default function CommunicationDashboard() {
 
   useEffect(() => {
     if (esRef.current) return;
-    const es = new EventSource("/api/communication/events");
+    const es = new EventSource("http://backend:8080/communication/events");
 
     function handle(evtType: string, e: MessageEvent) {
       try {
@@ -165,9 +165,8 @@ export default function CommunicationDashboard() {
 
               <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full ${
-                    m.failed ? "bg-red-400" : "bg-blue-300"
-                  }`}
+                  className={`h-full ${m.failed ? "bg-red-400" : "bg-blue-300"
+                    }`}
                   style={{ width: `${prog}%` }}
                 />
               </div>

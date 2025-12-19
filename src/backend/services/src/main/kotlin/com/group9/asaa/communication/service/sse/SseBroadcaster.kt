@@ -4,9 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.group9.asaa.classes.communication.EventEnvelope
 import com.group9.asaa.communication.service.kafka.KafkaConfiguration
 import jakarta.annotation.PostConstruct
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import jakarta.annotation.PreDestroy
+import kotlinx.coroutines.*
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.slf4j.LoggerFactory
@@ -14,7 +13,7 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.time.Duration
-import java.util.*
+import java.util.Properties
 import java.util.concurrent.CopyOnWriteArrayList
 
 @Component
@@ -22,14 +21,41 @@ class SseBroadcaster(
     private val mapper: ObjectMapper
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val scope = CoroutineScope(Dispatchers.IO)
+
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(Dispatchers.IO + job)
+
     private val emitters = CopyOnWriteArrayList<SseEmitter>()
 
+    private var consumer: KafkaConsumer<String, String>? = null
+
     fun subscribe(): SseEmitter {
-        val emitter = SseEmitter(0L)
+        val emitter = SseEmitter(0L) // no timeout
         emitters.add(emitter)
-        emitter.onCompletion { emitters.remove(emitter) }
-        emitter.onTimeout { emitters.remove(emitter) }
+
+        fun remove() { emitters.remove(emitter) }
+
+        emitter.onCompletion { remove() }
+        emitter.onTimeout { remove() }
+        emitter.onError { remove() }
+
+        // Send a proper SSE heartbeat event (NOT raw ":comment" strings)
+        scope.launch {
+            while (emitters.contains(emitter) && isActive) {
+                try {
+                    emitter.send(
+                        SseEmitter.event()
+                            .name("heartbeat")
+                            .data("ping", MediaType.TEXT_PLAIN)
+                    )
+                } catch (_: Exception) {
+                    remove()
+                    break
+                }
+                delay(15_000)
+            }
+        }
+
         return emitter
     }
 
@@ -43,46 +69,60 @@ class SseBroadcaster(
                 put("value.deserializer", StringDeserializer::class.java)
                 put("auto.offset.reset", "earliest")
                 put("isolation.level", "read_committed")
+                // recommended in long-running consumers:
+                put("enable.auto.commit", "true")
             }
-            val consumer = KafkaConsumer<String, String>(props)
-            consumer.subscribe(listOf(KafkaConfiguration.TOPIC_NOTIFICATIONS))
-            while (true) {
-                val records = consumer.poll(Duration.ofMillis(500))
-                for (rec in records) {
-                    try {
-                        val evt = mapper.readValue(rec.value(), EventEnvelope::class.java)
-                        broadcast(evt)
-                    } catch (e: Exception) {
-                        log.error("Failed to parse notification: {}", e.message)
+
+            KafkaConsumer<String, String>(props).also { consumer = it }.use { c ->
+                c.subscribe(listOf(KafkaConfiguration.TOPIC_NOTIFICATIONS))
+
+                while (isActive) {
+                    val records = c.poll(Duration.ofMillis(500))
+                    for (rec in records) {
+                        try {
+                            val evt = mapper.readValue(rec.value(), EventEnvelope::class.java)
+                            broadcast(evt)
+                        } catch (e: Exception) {
+                            log.error("Failed to parse notification: {}", e.message)
+                        }
                     }
                 }
-            }
-        }
-        // Heartbeat
-        scope.launch {
-            while (true) {
-                broadcastComment("heartbeat")
-                kotlinx.coroutines.delay(15_000)
             }
         }
     }
 
     private fun broadcast(evt: EventEnvelope) {
-        val json = mapper.writeValueAsString(evt)
-        emitters.forEach { em ->
+        val dead = mutableListOf<SseEmitter>()
+
+        for (em in emitters) {
             try {
-                em.send(SseEmitter.event().id(evt.id).name(evt.eventType).data(json, MediaType.APPLICATION_JSON))
-            } catch (e: Exception) {
-                emitters.remove(em)
+                em.send(
+                    SseEmitter.event()
+                        .id(evt.id)
+                        .name(evt.eventType)
+                        .data(evt, MediaType.APPLICATION_JSON)
+                )
+            } catch (_: Exception) {
+                dead += em
             }
         }
+
+        if (dead.isNotEmpty()) emitters.removeAll(dead)
     }
 
-    private fun broadcastComment(comment: String) {
-        emitters.forEach { em ->
-            try {
-                em.send(":$comment")
-            } catch (_: Exception) { emitters.remove(em) }
+    @PreDestroy
+    fun shutdown() {
+        try {
+            consumer?.wakeup()
+        } catch (_: Exception) {
         }
+
+        // complete all emitters so requests finish cleanly
+        for (em in emitters) {
+            try { em.complete() } catch (_: Exception) {}
+        }
+        emitters.clear()
+
+        job.cancel()
     }
 }
