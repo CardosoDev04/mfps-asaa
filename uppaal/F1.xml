@@ -1,0 +1,637 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+	<declaration>// Place global declarations here.
+clock global_clock;
+chan order_denied;
+chan order_accepted;
+chan start_assembly;
+chan assembly_valid;
+chan assembly_invalid;
+chan assembly_timedout;
+chan part_assembled;
+chan send_transport_order;
+chan transport_confirmation_sent;
+chan check_availability;
+chan agv_available;
+chan agv_unavailable;
+chan fulfilling_order;
+chan order_fulfilled;
+chan assembly_order_timedout;
+
+
+clock available_clock;
+int tick = 0;   // 0 = even, 1 = odd
+int not_assembling = 1;
+
+clock delivery_clock;
+
+const int MAX_ORDERS = 50;
+int[0, MAX_ORDERS] assembly_orders_sent;
+int[0, MAX_ORDERS] assembly_orders_processed;
+
+void safe_inc(int[0, MAX_ORDERS] &amp;x) {
+    if (x &lt; MAX_ORDERS) {
+        x++;
+    }
+}
+</declaration>
+	<template>
+		<name>Timekeeper</name>
+		<declaration>//TIMEKEEPER
+
+clock t;
+</declaration>
+		<location id="id0" x="0" y="0">
+			<name x="-10" y="-34">L</name>
+			<label kind="invariant" x="-68" y="0">t &lt;= 1</label>
+		</location>
+		<init ref="id0"/>
+		<transition id="id1">
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="68" y="-8">t &gt;= 1</label>
+			<label kind="assignment" x="68" y="25">tick = (tick + 1) % 5, t = 0</label>
+			<nail x="59" y="0"/>
+			<nail x="51" y="59"/>
+			<nail x="0" y="51"/>
+		</transition>
+	</template>
+	<template>
+		<name>RandomAvailability</name>
+		<declaration>// RANDOM_AVAILABILITY</declaration>
+		<location id="id2" x="-450" y="-8">
+			<name x="-510" y="-17">Start</name>
+		</location>
+		<location id="id3" x="-433" y="-153">
+			<name x="-484" y="-187">Unavailable</name>
+		</location>
+		<location id="id4" x="-221" y="0">
+			<name x="-221" y="17">Available</name>
+		</location>
+		<location id="id5" x="-238" y="-161">
+			<name x="-248" y="-195">Reset</name>
+		</location>
+		<init ref="id2"/>
+		<transition id="id6">
+			<source ref="id5"/>
+			<target ref="id2"/>
+		</transition>
+		<transition id="id7">
+			<source ref="id3"/>
+			<target ref="id5"/>
+		</transition>
+		<transition id="id8">
+			<source ref="id4"/>
+			<target ref="id5"/>
+		</transition>
+		<transition id="id9">
+			<source ref="id2"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-442" y="25">tick != 0</label>
+			<label kind="synchronisation" x="-433" y="8">agv_available!</label>
+		</transition>
+		<transition id="id10">
+			<source ref="id2"/>
+			<target ref="id3"/>
+			<label kind="guard" x="-663" y="-110">tick == 0</label>
+			<label kind="synchronisation" x="-595" y="-85">agv_unavailable!</label>
+		</transition>
+	</template>
+	<template>
+		<name>Transportation</name>
+		<declaration>// TRANSPORTATION
+
+
+clock t;</declaration>
+		<location id="id11" x="-867" y="-272">
+			<name x="-877" y="-306">Start</name>
+		</location>
+		<location id="id12" x="-552" y="-348">
+			<name x="-562" y="-382">ReceivingOrder</name>
+		</location>
+		<location id="id13" x="-102" y="-374">
+			<name x="-112" y="-408">CheckingAvailability</name>
+		</location>
+		<location id="id14" x="-229" y="51">
+			<name x="-229" y="68">FulfillingOrder</name>
+			<label kind="invariant" x="-272" y="93">delivery_clock &lt;= 300</label>
+		</location>
+		<location id="id15" x="-467" y="-102">
+			<name x="-535" y="-85">NotifyingNotAvailable</name>
+		</location>
+		<location id="id16" x="-696" y="-229">
+			<name x="-782" y="-280">NotifyingStatus_NotAvailable</name>
+		</location>
+		<location id="id17" x="-578" y="68">
+			<name x="-680" y="93">NotifyingStatus_FulfillingOrder</name>
+		</location>
+		<location id="id18" x="-306" y="-255">
+			<name x="-391" y="-289">DenyingOrder</name>
+		</location>
+		<location id="id19" x="-93" y="-153">
+			<name x="-59" y="-187">AcceptingOrder</name>
+		</location>
+		<location id="id20" x="-399" y="-170">
+			<name x="-544" y="-204">SentConfirmation</name>
+		</location>
+		<location id="id21" x="-977" y="-59">
+			<name x="-952" y="-85">OrderFulfilled</name>
+			<label kind="invariant" x="-1164" y="-51">delivery_clock &lt;= 300</label>
+		</location>
+		<location id="id22" x="-977" y="-178">
+			<name x="-1207" y="-204">NotifyingStatus_Fulfilled</name>
+		</location>
+		<location id="id23" x="-153" y="-51">
+			<name x="-119" y="-59">OrderAccepted</name>
+		</location>
+		<location id="id24" x="-348" y="-365">
+			<name x="-399" y="-408">ReceivedOrder</name>
+		</location>
+		<location id="id25" x="-144" y="-289">
+			<name x="-119" y="-314">SendingConfirmation</name>
+		</location>
+		<location id="id26" x="-646" y="-484">
+			<name x="-656" y="-518">TimedOut</name>
+		</location>
+		<init ref="id11"/>
+		<transition id="id27">
+			<source ref="id13"/>
+			<target ref="id26"/>
+			<label kind="synchronisation" x="-442" y="-476">assembly_order_timedout?</label>
+		</transition>
+		<transition id="id28">
+			<source ref="id26"/>
+			<target ref="id11"/>
+		</transition>
+		<transition id="id29">
+			<source ref="id24"/>
+			<target ref="id26"/>
+			<label kind="synchronisation" x="-697" y="-425">assembly_order_timedout?</label>
+		</transition>
+		<transition id="id30">
+			<source ref="id13"/>
+			<target ref="id25"/>
+			<label kind="synchronisation" x="-123" y="-348">check_availability?</label>
+		</transition>
+		<transition id="id31">
+			<source ref="id25"/>
+			<target ref="id19"/>
+			<label kind="synchronisation" x="-118" y="-238">agv_available?</label>
+		</transition>
+		<transition id="id32">
+			<source ref="id25"/>
+			<target ref="id18"/>
+			<label kind="synchronisation" x="-289" y="-314">agv_unavailable?</label>
+		</transition>
+		<transition id="id33">
+			<source ref="id24"/>
+			<target ref="id13"/>
+		</transition>
+		<transition id="id34">
+			<source ref="id12"/>
+			<target ref="id24"/>
+		</transition>
+		<transition id="id35">
+			<source ref="id23"/>
+			<target ref="id14"/>
+			<label kind="synchronisation" x="-178" y="-17">fulfilling_order!</label>
+			<label kind="assignment" x="-195" y="17">delivery_clock = 0</label>
+		</transition>
+		<transition id="id36">
+			<source ref="id19"/>
+			<target ref="id23"/>
+			<label kind="synchronisation" x="-110" y="-127">order_accepted!</label>
+			<label kind="assignment" x="-123" y="-102">safe_inc(assembly_orders_processed)</label>
+		</transition>
+		<transition id="id37">
+			<source ref="id22"/>
+			<target ref="id11"/>
+		</transition>
+		<transition id="id38">
+			<source ref="id21"/>
+			<target ref="id22"/>
+			<label kind="synchronisation" x="-960" y="-136">order_fulfilled!</label>
+		</transition>
+		<transition id="id39">
+			<source ref="id17"/>
+			<target ref="id21"/>
+			<label kind="assignment" x="-960" y="0">delivery_clock = 0</label>
+		</transition>
+		<transition id="id40">
+			<source ref="id18"/>
+			<target ref="id20"/>
+			<label kind="synchronisation" x="-357" y="-212">order_denied!</label>
+			<label kind="assignment" x="-408" y="-195">safe_inc(assembly_orders_processed)</label>
+			<nail x="-382" y="-187"/>
+		</transition>
+		<transition id="id41">
+			<source ref="id20"/>
+			<target ref="id15"/>
+		</transition>
+		<transition id="id42">
+			<source ref="id16"/>
+			<target ref="id11"/>
+		</transition>
+		<transition id="id43">
+			<source ref="id15"/>
+			<target ref="id16"/>
+		</transition>
+		<transition id="id44">
+			<source ref="id14"/>
+			<target ref="id17"/>
+		</transition>
+		<transition id="id45">
+			<source ref="id11"/>
+			<target ref="id12"/>
+			<label kind="synchronisation" x="-782" y="-357">send_transport_order?</label>
+		</transition>
+	</template>
+	<template>
+		<name>Assembler</name>
+		<declaration>// ASSEMBLER
+
+clock validation_clock;</declaration>
+		<location id="id46" x="-790" y="-246">
+			<name x="-800" y="-280">Start</name>
+		</location>
+		<location id="id47" x="-578" y="-323">
+			<name x="-588" y="-357">LoadingBlueprint</name>
+		</location>
+		<location id="id48" x="-365" y="-297">
+			<name x="-375" y="-331">LockingInParts</name>
+		</location>
+		<location id="id49" x="-221" y="-187">
+			<name x="-231" y="-221">Assembling</name>
+		</location>
+		<location id="id50" x="-229" y="-25">
+			<name x="-204" y="-42">Validating</name>
+		</location>
+		<location id="id51" x="-552" y="-76">
+			<name x="-562" y="-110">Discarting</name>
+		</location>
+		<location id="id52" x="-578" y="8">
+			<name x="-714" y="34">NotifyingStatus_Validation</name>
+		</location>
+		<location id="id53" x="-382" y="93">
+			<name x="-391" y="110">Approving</name>
+		</location>
+		<location id="id54" x="-748" y="-25">
+			<name x="-824" y="-8">MovePartAlong</name>
+		</location>
+		<location id="id55" x="-850" y="-119">
+			<name x="-1054" y="-102">NotifyStatus_MovedPartAlong</name>
+		</location>
+		<location id="id56" x="-552" y="-195">
+			<name x="-562" y="-229">TimedOut</name>
+		</location>
+		<location id="id57" x="-952" y="-229">
+			<name x="-1232" y="-238">SettingNotAssembling_Assembled</name>
+		</location>
+		<location id="id58" x="-680" y="-221">
+			<name x="-705" y="-255">SettingNotAssembling_Timedout</name>
+		</location>
+		<init ref="id46"/>
+		<transition id="id59">
+			<source ref="id58"/>
+			<target ref="id46"/>
+		</transition>
+		<transition id="id60">
+			<source ref="id56"/>
+			<target ref="id58"/>
+			<label kind="assignment" x="-731" y="-187">not_assembling = 1</label>
+		</transition>
+		<transition id="id61">
+			<source ref="id57"/>
+			<target ref="id46"/>
+			<label kind="assignment" x="-969" y="-272">not_assembling = 1</label>
+		</transition>
+		<transition id="id62">
+			<source ref="id55"/>
+			<target ref="id57"/>
+			<label kind="synchronisation" x="-1020" y="-170">part_assembled!</label>
+		</transition>
+		<transition id="id63">
+			<source ref="id50"/>
+			<target ref="id56"/>
+			<label kind="guard" x="-467" y="-187">validation_clock &gt; 2</label>
+			<label kind="synchronisation" x="-534" y="-127">assembly_timedout!</label>
+		</transition>
+		<transition id="id64">
+			<source ref="id54"/>
+			<target ref="id55"/>
+		</transition>
+		<transition id="id65">
+			<source ref="id52"/>
+			<target ref="id54"/>
+		</transition>
+		<transition id="id66">
+			<source ref="id51"/>
+			<target ref="id52"/>
+		</transition>
+		<transition id="id67">
+			<source ref="id53"/>
+			<target ref="id52"/>
+		</transition>
+		<transition id="id68">
+			<source ref="id50"/>
+			<target ref="id53"/>
+			<label kind="guard" x="-297" y="25">validation_clock &lt;= 2</label>
+			<label kind="synchronisation" x="-297" y="51">assembly_valid?</label>
+		</transition>
+		<transition id="id69">
+			<source ref="id50"/>
+			<target ref="id51"/>
+			<label kind="guard" x="-527" y="-51">validation_clock &lt;= 2</label>
+			<label kind="synchronisation" x="-501" y="-34">assembly_invalid?</label>
+		</transition>
+		<transition id="id70">
+			<source ref="id49"/>
+			<target ref="id50"/>
+			<label kind="assignment" x="-221" y="-102">validation_clock = 0</label>
+		</transition>
+		<transition id="id71">
+			<source ref="id48"/>
+			<target ref="id49"/>
+		</transition>
+		<transition id="id72">
+			<source ref="id47"/>
+			<target ref="id48"/>
+		</transition>
+		<transition id="id73">
+			<source ref="id46"/>
+			<target ref="id47"/>
+			<label kind="synchronisation" x="-773" y="-323">start_assembly?</label>
+			<label kind="assignment" x="-705" y="-280">not_assembling = 0</label>
+		</transition>
+	</template>
+	<template>
+		<name x="5" y="5">Assembly</name>
+		<declaration>// ASSEMBLY
+
+clock confirmation_clock;
+</declaration>
+		<location id="id74" x="0" y="0">
+			<name x="-10" y="-34">Start</name>
+		</location>
+		<location id="id75" x="187" y="-17">
+			<name x="177" y="-51">CreatingOrder</name>
+		</location>
+		<location id="id76" x="382" y="0">
+			<name x="372" y="-34">NotifyingStatus_CreatedOrder</name>
+		</location>
+		<location id="id77" x="578" y="59">
+			<name x="568" y="25">SendingOrder</name>
+		</location>
+		<location id="id78" x="629" y="170">
+			<name x="637" y="136">NotifyingStatus_SentOrder</name>
+		</location>
+		<location id="id79" x="629" y="289">
+			<name x="646" y="263">ReceivingConfirmation</name>
+			<label kind="invariant" x="646" y="289">confirmation_clock &lt;= 2</label>
+		</location>
+		<location id="id80" x="586" y="459">
+			<name x="612" y="442">NotifyingStatus_OrderAccepted</name>
+		</location>
+		<location id="id81" x="187" y="195">
+			<name x="178" y="161">NotifyingStatus_OrderDenied</name>
+		</location>
+		<location id="id82" x="391" y="501">
+			<name x="323" y="459">WaitingForOrder</name>
+		</location>
+		<location id="id83" x="110" y="442">
+			<name x="102" y="408">NotifyingStatus_ReceivedOrder</name>
+		</location>
+		<location id="id84" x="-51" y="357">
+			<name x="-42" y="332">Assembling</name>
+		</location>
+		<location id="id85" x="-85" y="170">
+			<name x="-323" y="153">NotifyingStatus_Assembled</name>
+		</location>
+		<location id="id86" x="348" y="136">
+			<name x="338" y="102">OrderTimedOut</name>
+		</location>
+		<location id="id87" x="501" y="374">
+			<name x="391" y="391">EvaluatingConfirmation</name>
+		</location>
+		<location id="id88" x="314" y="297">
+			<name x="238" y="314">OrderDenied</name>
+		</location>
+		<location id="id89" x="671" y="374">
+			<name x="696" y="365">OrderAccepted</name>
+		</location>
+		<location id="id90" x="-280" y="306">
+			<name x="-263" y="280">AssemblyTimedOut</name>
+		</location>
+		<location id="id91" x="-357" y="85">
+			<name x="-476" y="34">NotifyingStatus_AssemblyTimedOut</name>
+		</location>
+		<init ref="id74"/>
+		<transition id="id92">
+			<source ref="id91"/>
+			<target ref="id74"/>
+		</transition>
+		<transition id="id93">
+			<source ref="id90"/>
+			<target ref="id91"/>
+		</transition>
+		<transition id="id94">
+			<source ref="id84"/>
+			<target ref="id90"/>
+			<label kind="synchronisation" x="-263" y="340">assembly_timedout?</label>
+		</transition>
+		<transition id="id95">
+			<source ref="id89"/>
+			<target ref="id80"/>
+		</transition>
+		<transition id="id96">
+			<source ref="id87"/>
+			<target ref="id89"/>
+			<label kind="synchronisation" x="544" y="348">order_accepted?</label>
+		</transition>
+		<transition id="id97">
+			<source ref="id88"/>
+			<target ref="id81"/>
+		</transition>
+		<transition id="id98">
+			<source ref="id87"/>
+			<target ref="id88"/>
+			<label kind="synchronisation" x="348" y="357">order_denied?</label>
+		</transition>
+		<transition id="id99">
+			<source ref="id79"/>
+			<target ref="id87"/>
+			<label kind="guard" x="399" y="297">confirmation_clock &lt;= 2</label>
+			<label kind="synchronisation" x="586" y="314">check_availability!</label>
+		</transition>
+		<transition id="id100">
+			<source ref="id86"/>
+			<target ref="id74"/>
+			<label kind="assignment" x="170" y="42">confirmation_clock = 0</label>
+		</transition>
+		<transition id="id101">
+			<source ref="id79"/>
+			<target ref="id86"/>
+			<label kind="guard" x="408" y="144">confirmation_clock &gt; 2</label>
+			<label kind="synchronisation" x="348" y="221">assembly_order_timedout!</label>
+		</transition>
+		<transition id="id102">
+			<source ref="id81"/>
+			<target ref="id74"/>
+			<label kind="assignment" x="-42" y="153">confirmation_clock = 0</label>
+		</transition>
+		<transition id="id103">
+			<source ref="id85"/>
+			<target ref="id74"/>
+		</transition>
+		<transition id="id104">
+			<source ref="id84"/>
+			<target ref="id85"/>
+			<label kind="synchronisation" x="-59" y="246">part_assembled?</label>
+		</transition>
+		<transition id="id105">
+			<source ref="id83"/>
+			<target ref="id84"/>
+			<label kind="synchronisation" x="-59" y="416">start_assembly!</label>
+		</transition>
+		<transition id="id106">
+			<source ref="id82"/>
+			<target ref="id83"/>
+			<label kind="synchronisation" x="153" y="501">order_fulfilled?</label>
+		</transition>
+		<transition id="id107">
+			<source ref="id80"/>
+			<target ref="id82"/>
+			<label kind="synchronisation" x="425" y="442">fulfilling_order?</label>
+			<label kind="assignment" x="425" y="493">confirmation_clock = 0</label>
+		</transition>
+		<transition id="id108">
+			<source ref="id78"/>
+			<target ref="id79"/>
+			<label kind="assignment" x="637" y="229">confirmation_clock = 0</label>
+		</transition>
+		<transition id="id109">
+			<source ref="id77"/>
+			<target ref="id78"/>
+			<label kind="synchronisation" x="603" y="85">send_transport_order!</label>
+			<label kind="assignment" x="620" y="102">safe_inc(assembly_orders_sent)</label>
+		</transition>
+		<transition id="id110">
+			<source ref="id76"/>
+			<target ref="id77"/>
+		</transition>
+		<transition id="id111">
+			<source ref="id75"/>
+			<target ref="id76"/>
+		</transition>
+		<transition id="id112">
+			<source ref="id74"/>
+			<target ref="id75"/>
+			<label kind="guard" x="-8" y="-51">not_assembling == 1</label>
+		</transition>
+	</template>
+	<system>// Place template instantiations here.
+assembly = Assembly();
+assembler = Assembler();
+transportation = Transportation();
+timekeeper = Timekeeper();
+random_availability = RandomAvailability();
+// List one or more processes to be composed into a system.
+system assembly, assembler, transportation, timekeeper, random_availability;
+</system>
+	<queries>
+		<query>
+			<formula>A[] not deadlock
+</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:20 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; assembly.NotifyingStatus_CreatedOrder
+</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:21 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; assembly.NotifyingStatus_OrderAccepted</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:21 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; assembly.NotifyingStatus_OrderDenied</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:21 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; transportation.OrderFulfilled</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:21 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; (assembly.confirmation_clock &gt; 2)</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:21 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>A[] (assembly.ReceivingConfirmation imply assembly.confirmation_clock &lt;= 2)</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:21 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>A[] (global_clock &gt;= 300 imply assembly_orders_sent &gt;= 10)</formula>
+			<comment/>
+			<result outcome="failure" type="quality" timestamp="2025-11-11 11:14:43 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>A[] (global_clock &gt;= 300 imply assembly_orders_processed &gt;= 10)</formula>
+			<comment/>
+			<result outcome="failure" type="quality" timestamp="2025-11-11 11:12:29 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E[] (transportation.FulfillingOrder imply transportation.t &lt;= 300)</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:14:31 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; (transportation.t &gt; 300)</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:37 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; (transportation.FulfillingOrder and transportation.t &gt; 300)</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:12:41 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>A[] (transportation.FulfillingOrder imply delivery_clock &lt;= 300)
+</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:13:23 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>A[] (delivery_clock &gt; 300 and not transportation.OrderFulfilled)</formula>
+			<comment/>
+			<result outcome="failure" type="quality" timestamp="2025-11-11 11:14:11 +0100">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; (delivery_clock &gt; 300 and not transportation.OrderFulfilled)</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2025-11-11 11:13:29 +0100">
+			</result>
+		</query>
+	</queries>
+</nta>
