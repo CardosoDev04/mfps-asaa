@@ -121,18 +121,18 @@ jobs:
         run: |
           mkdir -p handin/images
 
-          # (optional) show images so you can debug
           docker images
 
-          # Save by service image IDs from compose (reliable)
-          BACKEND_ID="$(docker compose -f docker-compose.yml images -q backend)"
-          DASHBOARD_ID="$(docker compose -f docker-compose.yml images -q dashboard)"
+          BACKEND_IMAGE="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'backend:latest$' | head -n 1)"
+          DASHBOARD_IMAGE="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'dashboard:latest$' | head -n 1)"
 
-          echo "Backend image id: $BACKEND_ID"
-          echo "Dashboard image id: $DASHBOARD_ID"
+          echo "Backend image: $BACKEND_IMAGE"
+          echo "Dashboard image: $DASHBOARD_IMAGE"
 
-          docker save -o handin/images/backend-image.tar "$BACKEND_ID"
-          docker save -o handin/images/dashboard-image.tar "$DASHBOARD_ID"
+          docker save -o handin/images/backend-image.tar "$BACKEND_IMAGE"
+          docker save -o handin/images/dashboard-image.tar "$DASHBOARD_IMAGE"
+
+          ls -lh handin/images
 
       - name: Upload Docker images artifact
         uses: actions/upload-artifact@v4
