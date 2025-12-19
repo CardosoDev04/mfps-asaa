@@ -457,7 +457,22 @@ To assess the impact of physical transportation latency on throughput, the exper
 \textbf{Conclusion for Experiment 2.}
 The results demonstrate that the system comfortably satisfies NFR1 under both low and high transportation latency conditions. While increased AGV travel time predictably reduces throughput, the system maintains stable operation and sufficient processing capacity. Under the tested configurations, transportation time emerges as the dominant throughput-limiting factor, while service-layer concurrency remains sufficient to sustain continuous operation.
 
+\section{Threats to Validity}
+\label{sec:validity}
 
+Several threats to the validity of this study must be considered when interpreting the results.
+
+\textbf{Internal validity.}
+The experiments were conducted in a controlled, containerized environment with simulated transportation times. While this setup ensured repeatability and precise measurement, it may not fully reflect the variability, failures, and timing uncertainties present in real industrial environments.
+
+\textbf{Construct validity.}
+Performance was primarily evaluated using confirmation latency and transportation throughput, as defined in the quality attribute scenarios. Although these metrics directly capture the intended non-functional requirements, other aspects such as jitter, fairness among orders, and long-term system stability were not evaluated.
+
+\textbf{External validity.}
+The experimental setup involved a limited number of subsystems and AGVs. As a result, the findings may not directly generalize to larger or more heterogeneous production systems without additional validation under increased scale and diversity.
+
+\textbf{Model validity.}
+Formal verification using UPPAAL relied on abstract models of system behavior. Certain implementation-level details, particularly service-layer concurrency control and queueing effects, were not fully represented. This abstraction contributed to discrepancies between formal verification results and empirical findings.
 
 \section{Conclusion}
 \label{sec:conclusion}
